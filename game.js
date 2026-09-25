@@ -790,7 +790,11 @@
         const gy = 90 + random() * (H - 220 - gap);
         state.ents.push({
           type: "cannon", side: "top",
-          x, y: 0, w: 46, h: gy, gy, gap, alive: true
+          x, y: 0, w: 46, h: gy, gy, gap, alive: true,
+          fireTimer: 42 + Math.floor(random() * 74),
+          fireWarn: 0,
+          shotPattern: Math.floor(random() * 3),
+          hasFired: false
         });
         state.ents.push({
           type: "cannon", side: "bot",
@@ -1118,21 +1122,42 @@
 
     const scroll = L.speed;
     const hitbox = { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
+    let activeBolts = state.ents.filter((entity) => entity.type === "bolt" && entity.alive).length;
 
     for (const e of state.ents) {
       if (!e.alive && e.type !== "connector") continue;
       if (e.type !== "rocket") e.x -= scroll;
 
-      if (L.fire && e.type === "cannon" && e.alive && e.side === "top" && state.t % (48 - state.level * 3) === 0 && e.x > 80 && e.x < W - 40) {
-        state.ents.push({
-          type: "bolt",
-          x: e.x - 8,
-          y: e.h - 8,
-          w: 16, h: 8,
-          vx: -4.2,
-          vy: 1.6,
-          alive: true
-        });
+      if (L.fire && e.type === "cannon" && e.alive && e.side === "top" && e.x > 80 && e.x < W - 40 && !e.hasFired) {
+        if (e.fireWarn > 0) {
+          e.fireWarn--;
+          if (e.fireWarn === 0) {
+            if (activeBolts < 2) {
+              const shotVectors = [
+                { vx: -3.7, vy: -2.2 },
+                { vx: -4.6, vy: 0.4 },
+                { vx: -3.7, vy: 2.2 }
+              ];
+              const vector = shotVectors[e.shotPattern % shotVectors.length];
+              state.ents.push({
+                type: "bolt",
+                x: e.x - 10,
+                y: e.h - 26,
+                w: 14, h: 8,
+                vx: vector.vx,
+                vy: vector.vy,
+                alive: true
+              });
+              activeBolts++;
+              e.hasFired = true;
+            } else {
+              e.fireWarn = 12;
+            }
+          }
+        } else if (e.fireTimer > 0) {
+          e.fireTimer--;
+          if (e.fireTimer === 0) e.fireWarn = 28;
+        }
       }
 
       if (e.type === "shark" && e.alive) {
@@ -1349,6 +1374,23 @@
       ctx.textAlign = "left";
       if (e.side === "top") {
         ctx.drawImage(SPR.cannonL, e.x, e.h - 52);
+        if (e.fireWarn > 0) {
+          const vectors = [-1, 0, 1];
+          const slope = vectors[e.shotPattern % vectors.length];
+          const muzzleX = e.x + 4;
+          const muzzleY = e.h - 23;
+          ctx.fillStyle = (state.t >> 2) % 2 ? "#fff0a8" : "#f2a900";
+          ctx.fillRect(muzzleX - 3, muzzleY - 3, 8, 8);
+          ctx.fillStyle = "#ffe08a";
+          for (let mark = 1; mark <= 3; mark++) {
+            ctx.fillRect(muzzleX - mark * 10, muzzleY + slope * mark * 3, 4, 3);
+          }
+          ctx.fillStyle = "#fff0a8";
+          ctx.font = "bold 10px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("!", e.x + 28, e.h - 55);
+          ctx.textAlign = "left";
+        }
       } else {
         ctx.drawImage(SPR.cannonL, e.x, e.y);
       }
@@ -1401,9 +1443,9 @@
       ctx.restore();
     } else if (e.type === "bolt" && e.alive) {
       ctx.save();
-      ctx.globalAlpha = 0.45;
+      ctx.globalAlpha = 0.25;
       ctx.fillStyle = "#f2a900";
-      ctx.fillRect(e.x + 13, e.y + 3, 13, 2);
+      ctx.fillRect(e.x + 12, e.y + 3, 6, 2);
       ctx.restore();
       ctx.drawImage(SPR.bolt, e.x, e.y, e.w, e.h);
     } else if (e.type === "rocket" && e.alive) {
