@@ -21,13 +21,43 @@ html, body {
     0 0 60px rgba(20, 140, 180, 0.18);
   border-radius: 6px;
   overflow: hidden;
+  width: min(96vw, 1280px);
 }
 
 #game {
   display: block;
-  width: min(96vw, 1280px);
+  width: 100%;
   height: auto;
   background: #031018;
+  touch-action: none;
+}
+
+#controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  touch-action: manipulation;
+}
+
+#controls button {
+  min-height: 42px;
+  padding: 7px 13px;
+  border: 2px solid #28617a;
+  border-radius: 5px;
+  background: #0b2634;
+  color: #cde8f5;
+  font: 20px "VT323", monospace;
+  letter-spacing: 1px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#controls button:active {
+  background: #14506a;
+  border-color: #7fd7ff;
 }
 
 #scanlines {
@@ -50,4 +80,20 @@ html, body {
   letter-spacing: 1px;
   color: #7fb4c8;
   text-shadow: 0 2px 0 #021018;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
+  #controls { display: none; }
+}
+
+@media (max-width: 600px) {
+  html, body { justify-content: flex-start; }
+  #frame { width: 100vw; margin-top: 12px; }
+  #controls { width: 100%; gap: 6px; margin-top: 10px; }
+  #controls button { flex: 1; padding: 6px 4px; font-size: 18px; }
+  #hint { max-width: 96vw; margin-top: 8px; font-size: 18px; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #frame { box-shadow: 0 0 0 4px #16384a, 0 0 0 8px #0b1c26; }
 }

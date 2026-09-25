@@ -7,23 +7,57 @@
 
   const W = canvas.width;
   const H = canvas.height;
+  const buttons = {
+    flap: document.getElementById("flap-button"),
+    shout: document.getElementById("shout-button"),
+    pause: document.getElementById("pause-button"),
+    mute: document.getElementById("mute-button")
+  };
 
   const KEY = {};
   addEventListener("keydown", (e) => {
+    if (e.repeat && ["KeyP", "Escape", "KeyM"].includes(e.code)) return;
     KEY[e.code] = true;
-    if (["Space", "ArrowUp", "KeyT"].includes(e.code)) e.preventDefault();
+    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
   canvas.addEventListener("pointerdown", () => { KEY.Pointer = true; });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  function bindPressButton(button, key) {
+    if (!button) return;
+    button.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      button.setPointerCapture(e.pointerId);
+    });
+    button.addEventListener("click", () => { KEY[key] = true; });
+  }
+  bindPressButton(buttons.flap, "Pointer");
+  bindPressButton(buttons.shout, "KeyT");
+  bindPressButton(buttons.pause, "KeyP");
+  bindPressButton(buttons.mute, "KeyM");
+
+  function updateControlLabels() {
+    if (buttons.pause) {
+      buttons.pause.textContent = state.mode === "paused" ? "RESUME" : "PAUSE";
+      buttons.pause.setAttribute("aria-label", state.mode === "paused" ? "Resume game" : "Pause game");
+    }
+    if (buttons.mute) {
+      buttons.mute.textContent = audio.muted ? "UNMUTE" : "MUTE";
+      buttons.mute.setAttribute("aria-label", audio.muted ? "Unmute sound" : "Mute sound");
+    }
+  }
 
   const audio = {
     ctx: null,
+    muted: false,
     ensure() {
       if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (this.ctx.state === "suspended") this.ctx.resume();
       return this.ctx;
     },
     beep(freq, dur, type, vol, slide) {
+      if (this.muted) return;
       const ac = this.ensure();
       const o = ac.createOscillator();
       const g = ac.createGain();
@@ -38,6 +72,7 @@
     },
     flap() { this.beep(420, 0.08, "square", 0.05, 720); },
     shout() {
+      if (this.muted) return;
       const ac = this.ensure();
       const now = ac.currentTime;
       [196, 294, 392, 523].forEach((f, i) => {
@@ -87,15 +122,28 @@
   const SPR = { hero: { ready: false }, side: {} };
 
   function loadHero() {
-    const names = ["idle", "swim", "shout", "dive", "hurt", "thumbs", "ray"];
+    const names = ["idle", "swim", "swim_2", "swim_3", "shout", "dive", "hurt", "thumbs", "ray"];
     let left = names.length;
+    const settled = new Set();
+    function settle(name) {
+      if (settled.has(name)) return;
+      settled.add(name);
+      left--;
+      if (left === 0) {
+        SPR.hero.ready = Boolean(SPR.hero.swim);
+        if (!SPR.hero.ready) console.warn("Hero swim sprite failed to load; using the fallback shape.");
+      }
+    }
     names.forEach((n) => {
       const img = new Image();
       img.onload = () => {
         SPR.hero[n] = img;
-        if (--left === 0) SPR.hero.ready = true;
+        settle(n);
       };
-      img.onerror = () => { left--; };
+      img.onerror = () => {
+        console.warn("Could not load optional hero sprite: assets/" + n + ".png");
+        settle(n);
+      };
       img.src = "assets/" + n + ".png";
     });
   }
@@ -470,11 +518,13 @@
     state.linked = 0;
     state.needLink = L.connectors;
     state.dist = 0;
-    state.trabajeen = L.shouts || 3;
+    state.trabajeen = L.shouts ?? 3;
     state.shoutPulse = 0;
     state.shoutText = 0;
     state.invuln = 40;
     state.winTimer = 0;
+    state.finishing = false;
+    state.hurtTimer = 0;
     state.player.x = 170;
     state.player.y = H / 2;
     state.player.vy = 0;
@@ -612,14 +662,15 @@
     if (state.invuln > 0) return;
     state.health--;
     state.invuln = 70;
+    state.hurtTimer = 18;
     audio.hit();
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
     if (state.health <= 0) state.mode = "dead";
   }
 
   function finishLevel() {
-    const L = LEVELS[state.level];
-    if (state.health <= 0) return;
+    if (state.finishing || state.health <= 0) return;
+    state.finishing = true;
     const gained = 200 + state.score + state.linked * 80 + state.health * 50;
     state.vested += gained;
     state.score = 0;
@@ -647,10 +698,15 @@
       state.level = state.checkpoint || 0;
     }
     spawnLevel();
+    updateControlLabels();
   }
 
   function update() {
-    state.t++;
+    if (KEY.KeyM) {
+      audio.muted = !audio.muted;
+      KEY.KeyM = false;
+      updateControlLabels();
+    }
 
     if (state.mode === "title") {
       if (KEY.Enter || KEY.Space || KEY.Pointer) {
@@ -666,6 +722,16 @@
       }
       return;
     }
+
+    if ((KEY.KeyP || KEY.Escape) && ["play", "paused"].includes(state.mode)) {
+      state.mode = state.mode === "paused" ? "play" : "paused";
+      KEY.KeyP = KEY.Escape = false;
+      updateControlLabels();
+      return;
+    }
+    if (state.mode === "paused") return;
+
+    state.t++;
 
     const L = LEVELS[state.level];
     const p = state.player;
@@ -689,6 +755,7 @@
     if (state.shoutPulse > 0) state.shoutPulse--;
     if (state.shoutText > 0) state.shoutText--;
     if (state.invuln > 0) state.invuln--;
+    if (state.hurtTimer > 0) state.hurtTimer--;
     if (state.bannerLife > 0) state.bannerLife--;
 
     state.squad.forEach((s, i) => {
@@ -884,7 +951,14 @@
   function drawHero() {
     const p = state.player;
     if (state.invuln > 0 && state.t % 6 < 2) return;
-    const img = SPR.hero.ready ? SPR.hero.swim : null;
+    const swimCycle = [SPR.hero.swim, SPR.hero.swim_3, SPR.hero.swim_2, SPR.hero.swim_3];
+    let img = null;
+    if (SPR.hero.ready) {
+      if (state.hurtTimer > 0) img = SPR.hero.hurt || SPR.hero.swim;
+      else if (state.shoutPulse > 0) img = SPR.hero.shout || SPR.hero.swim;
+      else if (p.vy > 4.2) img = SPR.hero.dive || SPR.hero.swim;
+      else img = swimCycle[Math.floor(state.t / 6) % swimCycle.length] || SPR.hero.swim;
+    }
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     const tilt = Math.max(-0.35, Math.min(0.4, p.vy * 0.045));
@@ -916,7 +990,7 @@
     ctx.fillText("L" + (state.level + 1) + " " + L.name, 250, 23);
 
     ctx.fillStyle = "#cde8f5";
-    const maxT = L.shouts || 3;
+    const maxT = L.shouts ?? 3;
     ctx.fillText("T x" + state.trabajeen, 600, 23);
     for (let i = 0; i < maxT; i++) {
       ctx.fillStyle = i < state.trabajeen ? "#00a1e0" : "#1a3038";
@@ -1016,6 +1090,19 @@
     drawHud();
   }
 
+  function drawPauseOverlay() {
+    ctx.fillStyle = "rgba(0, 8, 14, 0.68)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f0d060";
+    ctx.font = "20px 'Press Start 2P', monospace";
+    ctx.fillText("PAUSED", W / 2, H / 2 - 8);
+    ctx.fillStyle = "#cde8f5";
+    ctx.font = "24px 'VT323', monospace";
+    ctx.fillText("Press P / ESC or tap RESUME", W / 2, H / 2 + 28);
+    ctx.textAlign = "left";
+  }
+
   function drawTitle() {
     drawBg();
     ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -1053,14 +1140,43 @@
     ctx.textAlign = "left";
   }
 
-  function frame() {
-    update();
+  const STEP_MS = 1000 / 60;
+  let previousFrameTime = null;
+  let accumulator = 0;
+  document.addEventListener("visibilitychange", () => {
+    previousFrameTime = null;
+    accumulator = 0;
+    if (document.hidden) {
+      KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+    }
+  });
+
+  function frame(now) {
+    if (previousFrameTime === null) previousFrameTime = now;
+    accumulator += Math.min(now - previousFrameTime, 100);
+    previousFrameTime = now;
+    let steps = 0;
+    while (accumulator >= STEP_MS && steps < 6) {
+      update();
+      accumulator -= STEP_MS;
+      steps++;
+      if (state.mode === "paused") {
+        accumulator = 0;
+        break;
+      }
+    }
+    if (steps === 6) accumulator = 0;
+
     if (state.mode === "title") drawTitle();
     else if (state.mode === "dead") drawEnd(false);
     else if (state.mode === "win") drawEnd(true);
-    else drawPlay();
+    else {
+      drawPlay();
+      if (state.mode === "paused") drawPauseOverlay();
+    }
     requestAnimationFrame(frame);
   }
 
-  frame();
+  updateControlLabels();
+  requestAnimationFrame(frame);
 })();
