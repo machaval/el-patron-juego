@@ -451,7 +451,8 @@
       connectors: 8,
       squad: 3,
       killN: 9,
-      shouts: 6
+      shouts: 6,
+      fire: true
     },
     {
       name: "MULE 4 ABYSS",
@@ -467,7 +468,8 @@
       connectors: 8,
       squad: 4,
       killN: 12,
-      shouts: 6
+      shouts: 6,
+      fire: true
     },
     {
       name: "IPO CONTROL PLANE",
@@ -483,7 +485,8 @@
       connectors: 8,
       squad: 5,
       killN: 15,
-      shouts: 6
+      shouts: 6,
+      fire: true
     }
   ];
 
@@ -564,6 +567,31 @@
     });
   }
 
+  function createRunSeed() {
+    try {
+      const values = new Uint32Array(1);
+      crypto.getRandomValues(values);
+      return values[0] || 1;
+    } catch {
+      return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0 || 1;
+    }
+  }
+
+  function createSeededRandom(seed) {
+    let value = seed >>> 0;
+    return function random() {
+      value = (value + 0x6d2b79f5) >>> 0;
+      let mixed = value;
+      mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+      mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+      return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function levelSeed(runSeed, level) {
+    return (runSeed ^ Math.imul(level + 1, 0x9e3779b9)) >>> 0;
+  }
+
   const state = {
     mode: "title",
     level: 0,
@@ -595,7 +623,8 @@
     banner: null,
     bannerLife: 0,
     winTimer: 0,
-    checkpoint: 0
+    checkpoint: 0,
+    runSeed: 0
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -633,6 +662,7 @@
 
   function spawnLevel() {
     const L = LEVELS[state.level];
+    const random = createSeededRandom(levelSeed(state.runSeed, state.level));
     state.ents = [];
     state.parts = [];
     state.effects = [];
@@ -667,8 +697,8 @@
       const gapBase = 168 - state.level * 8;
       let x = 420;
       while (x < L.length - 380) {
-        const gap = gapBase + Math.random() * 30;
-        const gy = 90 + Math.random() * (H - 220 - gap);
+        const gap = gapBase + random() * 30;
+        const gy = 90 + random() * (H - 220 - gap);
         state.ents.push({
           type: "cannon", side: "top",
           x, y: 0, w: 46, h: gy, gy, gap, alive: true
@@ -677,7 +707,7 @@
           type: "cannon", side: "bot",
           x, y: gy + gap, w: 46, h: H - (gy + gap), gy, gap, alive: true
         });
-        x += 300 + Math.random() * 90 - state.level * 8;
+        x += 300 + random() * 90 - state.level * 8;
       }
     }
 
@@ -685,11 +715,11 @@
       for (let i = 0; i < L.sharks; i++) {
         state.ents.push({
           type: "shark",
-          x: 640 + i * 780 + Math.random() * 80,
-          y: 90 + Math.random() * (H - 180),
+          x: 640 + i * 780 + random() * 80,
+          y: 90 + random() * (H - 180),
           w: 100, h: 34,
-          vy: (Math.random() < 0.5 ? -1 : 1) * (0.55 + Math.random() * 0.35),
-          vx: 1.1 + Math.random() * 0.5,
+          vy: (random() < 0.5 ? -1 : 1) * (0.55 + random() * 0.35),
+          vx: 1.1 + random() * 0.5,
           alive: true
         });
       }
@@ -700,22 +730,53 @@
         const kind = i % 3;
         state.ents.push({
           type: "bug", kind,
-          x: 500 + i * 280 + Math.random() * 80,
-          y: 80 + Math.random() * (H - 160),
+          x: 500 + i * 280 + random() * 80,
+          y: 80 + random() * (H - 160),
           w: 40, h: 30,
-          vy: (Math.random() < 0.5 ? -1 : 1) * (0.8 + Math.random()),
+          vy: (random() < 0.5 ? -1 : 1) * (0.8 + random()),
           alive: true
         });
       }
     }
 
+    let previousConnectorY = H / 2;
+    let previousConnectorX = 0;
     for (let i = 0; i < L.connectors; i++) {
+      const baseX = 520 + i * ((L.length - 900) / Math.max(1, L.connectors));
+      const candidateOffsets = [0];
+      for (let offset = 30; offset <= 300; offset += 30) {
+        candidateOffsets.push(-offset, offset);
+      }
+      let chosen = null;
+      for (const offset of candidateOffsets) {
+        const x = baseX + offset;
+        if (x <= previousConnectorX + 170 || x >= L.length - 190) continue;
+
+        let minY = Math.max(82, previousConnectorY - 150);
+        let maxY = Math.min(H - 112, previousConnectorY + 150);
+        for (const cannon of state.ents) {
+          if (cannon.type !== "cannon" || cannon.side !== "top") continue;
+          if (x + 32 <= cannon.x || x >= cannon.x + cannon.w) continue;
+          minY = Math.max(minY, cannon.gy + 8);
+          maxY = Math.min(maxY, cannon.gy + cannon.gap - 40);
+        }
+        if (minY <= maxY) {
+          chosen = { x, y: minY + random() * (maxY - minY) };
+          break;
+        }
+      }
+
+      if (!chosen) {
+        throw new Error("Could not find a cannon-clear connector lane for level " + (state.level + 1) + ".");
+      }
       state.ents.push({
         type: "connector", kind: i % CONNECTORS.length,
-        x: 520 + i * ((L.length - 900) / Math.max(1, L.connectors)),
-        y: 90 + (i * 97) % (H - 180),
+        x: chosen.x,
+        y: chosen.y,
         w: 32, h: 32, linked: false, missed: false, alive: true
       });
+      previousConnectorX = chosen.x;
+      previousConnectorY = chosen.y;
     }
 
     state.ents.push({
@@ -821,9 +882,10 @@
     state.mode = "level-transition";
   }
 
-  function startGame(fromCheckpoint, checkpointLevel) {
+  function startGame(fromCheckpoint, checkpointLevel, runSeed) {
     audio.ensure();
     state.mode = "play";
+    state.runSeed = runSeed ?? createRunSeed();
     state.score = 0;
     state.health = 3;
     if (!fromCheckpoint) {
@@ -869,7 +931,7 @@
     if (state.mode === "dead" || state.mode === "win") {
       if (KEY.Enter || KEY.Space || KEY.Pointer) {
         KEY.Enter = KEY.Space = KEY.Pointer = false;
-        startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint);
+        startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint, state.runSeed);
       }
       return;
     }
@@ -1370,6 +1432,8 @@
     ctx.font = "28px 'VT323', monospace";
     ctx.fillText("Vested options: $" + state.vested, W / 2, 270);
     ctx.fillText(state.checkpoint > 0 && !win ? "ENTER resume from L" + (state.checkpoint + 1) : "ENTER to dive again", W / 2, 314);
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("Run seed: " + state.runSeed, W / 2, 348);
     ctx.textAlign = "left";
   }
 
