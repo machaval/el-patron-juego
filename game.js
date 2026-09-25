@@ -7,6 +7,13 @@
 
   const W = canvas.width;
   const H = canvas.height;
+  const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  let reducedMotion = Boolean(motionPreference?.matches);
+  if (motionPreference?.addEventListener) {
+    motionPreference.addEventListener("change", (e) => { reducedMotion = e.matches; });
+  } else if (motionPreference?.addListener) {
+    motionPreference.addListener((e) => { reducedMotion = e.matches; });
+  }
   const buttons = {
     flap: document.getElementById("flap-button"),
     shout: document.getElementById("shout-button"),
@@ -478,6 +485,12 @@
     squad: [],
     ents: [],
     parts: [],
+    effects: [],
+    shakeLife: 0,
+    shakeDuration: 1,
+    damageFlash: 0,
+    transitionTimer: 0,
+    transitionReward: 0,
     bubbles: [],
     links: [],
     linked: 0,
@@ -509,10 +522,22 @@
     }
   }
 
+  function addEffect(effect) {
+    state.effects.push(effect);
+    if (state.effects.length > 80) state.effects.splice(0, state.effects.length - 80);
+  }
+
+  function addScoreEffect(x, y, text, color) {
+    addEffect({ type: "text", x, y, text, color, vy: -0.45, life: 48, duration: 48 });
+  }
+
   function spawnLevel() {
     const L = LEVELS[state.level];
     state.ents = [];
     state.parts = [];
+    state.effects = [];
+    state.shakeLife = 0;
+    state.damageFlash = 0;
     state.bubbles = [];
     state.links = [];
     state.linked = 0;
@@ -618,7 +643,10 @@
   function trabajeen() {
     if (state.mode !== "play") return;
     const L = LEVELS[state.level];
-    if (state.trabajeen <= 0 || L.squad <= 0) return;
+    if (state.trabajeen <= 0 || L.squad <= 0) {
+      addScoreEffect(state.player.x + 26, state.player.y - 12, "NO CHARGES", "#cde8f5");
+      return;
+    }
     state.trabajeen--;
     state.shoutPulse = 24;
     state.shoutText = 50;
@@ -643,7 +671,9 @@
     for (let i = 0; i < n; i++) {
       const e = foes[i];
       e.alive = false;
-      state.score += e.type === "cannon" ? 80 : 50;
+      const points = e.type === "cannon" ? 80 : 50;
+      state.score += points;
+      addScoreEffect(e.x + 8, e.y + 4, "+" + points, "#ffd86b");
       burst(e.x + 8, e.y + 4, "#ff8040", 12);
       state.ents.push({
         type: "rocket",
@@ -663,6 +693,9 @@
     state.health--;
     state.invuln = 70;
     state.hurtTimer = 18;
+    state.damageFlash = 10;
+    state.shakeLife = reducedMotion ? 0 : 10;
+    state.shakeDuration = 10;
     audio.hit();
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
     if (state.health <= 0) state.mode = "dead";
@@ -672,6 +705,7 @@
     if (state.finishing || state.health <= 0) return;
     state.finishing = true;
     const gained = 200 + state.score + state.linked * 80 + state.health * 50;
+    state.transitionReward = gained;
     state.vested += gained;
     state.score = 0;
     audio.win();
@@ -679,10 +713,8 @@
       state.mode = "win";
       return;
     }
-    state.level++;
-    state.checkpoint = state.level;
-    state.health = Math.min(state.maxHealth, state.health + 1);
-    spawnLevel();
+    state.transitionTimer = 90;
+    state.mode = "level-transition";
   }
 
   function startGame(fromCheckpoint) {
@@ -723,6 +755,19 @@
       return;
     }
 
+    if (state.mode === "level-transition") {
+      KEY.KeyP = KEY.Escape = false;
+      state.transitionTimer--;
+      if (state.transitionTimer <= 0) {
+        state.level++;
+        state.checkpoint = state.level;
+        state.health = Math.min(state.maxHealth, state.health + 1);
+        state.mode = "play";
+        spawnLevel();
+      }
+      return;
+    }
+
     if ((KEY.KeyP || KEY.Escape) && ["play", "paused"].includes(state.mode)) {
       state.mode = state.mode === "paused" ? "play" : "paused";
       KEY.KeyP = KEY.Escape = false;
@@ -757,6 +802,13 @@
     if (state.invuln > 0) state.invuln--;
     if (state.hurtTimer > 0) state.hurtTimer--;
     if (state.bannerLife > 0) state.bannerLife--;
+    if (state.shakeLife > 0) state.shakeLife--;
+    if (state.damageFlash > 0) state.damageFlash--;
+    for (const effect of state.effects) {
+      effect.life--;
+      if (effect.type === "text") effect.y += effect.vy;
+    }
+    state.effects = state.effects.filter((effect) => effect.life > 0);
 
     state.squad.forEach((s, i) => {
       const tx = p.x - 70 - i * 34;
@@ -825,6 +877,8 @@
         e.linked = true;
         state.linked++;
         state.score += 120;
+        addEffect({ type: "ring", x: e.x + 16, y: e.y + 16, color: "#7fd7ff", life: 24, duration: 24 });
+        addScoreEffect(e.x + 16, e.y + 4, "+120", "#7fd7ff");
         audio.link();
         burst(e.x + 16, e.y + 16, "#7fd7ff", 10);
         const prev = state.ents.filter((o) => o.type === "connector" && o.linked);
@@ -1048,6 +1102,14 @@
 
   function drawPlay() {
     drawBg();
+    ctx.save();
+    if (!reducedMotion && state.shakeLife > 0) {
+      const strength = 4 * (state.shakeLife / state.shakeDuration);
+      ctx.translate(
+        Math.sin(state.t * 2.7) * strength,
+        Math.cos(state.t * 3.1) * strength
+      );
+    }
 
     drawString();
     for (const e of state.ents) drawEntity(e);
@@ -1077,6 +1139,28 @@
       ctx.globalAlpha = 1;
     }
 
+    for (const effect of state.effects) {
+      const progress = 1 - effect.life / effect.duration;
+      const alpha = Math.min(1, effect.life / 12);
+      if (effect.type === "ring") {
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = effect.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(effect.x, effect.y, reducedMotion ? 16 : 8 + progress * 30, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (effect.type === "text") {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = effect.color;
+        ctx.font = "bold 24px 'VT323', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(effect.text, effect.x, effect.y);
+        ctx.textAlign = "left";
+        ctx.globalAlpha = 1;
+      }
+    }
+
     if (state.banner && state.bannerLife > 0) {
       ctx.globalAlpha = Math.min(1, state.bannerLife / 18);
       ctx.fillStyle = "#ffe680";
@@ -1088,6 +1172,30 @@
     }
 
     drawHud();
+    ctx.restore();
+
+    if (state.damageFlash > 0) {
+      ctx.globalAlpha = (state.damageFlash / 10) * 0.22;
+      ctx.fillStyle = "#ff3048";
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawLevelTransition() {
+    drawPlay();
+    ctx.fillStyle = "rgba(0, 8, 14, 0.72)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f0d060";
+    ctx.font = "16px 'Press Start 2P', monospace";
+    ctx.fillText("LEVEL COMPLETE", W / 2, H / 2 - 32);
+    ctx.fillStyle = "#cde8f5";
+    ctx.font = "30px 'VT323', monospace";
+    ctx.fillText("Vested +$" + state.transitionReward, W / 2, H / 2 + 8);
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("Next: " + LEVELS[state.level + 1].name, W / 2, H / 2 + 40);
+    ctx.textAlign = "left";
   }
 
   function drawPauseOverlay() {
@@ -1170,6 +1278,7 @@
     if (state.mode === "title") drawTitle();
     else if (state.mode === "dead") drawEnd(false);
     else if (state.mode === "win") drawEnd(true);
+    else if (state.mode === "level-transition") drawLevelTransition();
     else {
       drawPlay();
       if (state.mode === "paused") drawPauseOverlay();
