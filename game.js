@@ -167,8 +167,7 @@
     g.stroke();
   }
 
-  const HERO_LEG_CUT = 40;
-  const SPR = { hero: { ready: false }, side: {}, hero_body: null, hero_legs: null };
+  const SPR = { hero: { ready: false }, side: {} };
   SPR.lifeIcon = makeCanvas(40, 40, (g) => {
     g.fillStyle = "#00a1e0";
     g.beginPath();
@@ -187,16 +186,17 @@
   lifeIconImage.onload = () => { SPR.lifeIcon = lifeIconImage; };
   lifeIconImage.onerror = () => console.warn("Could not load life icon: assets/ui/mule-life.png");
   lifeIconImage.src = "assets/ui/mule-life.png";
-  function sliceHero() {
-    if (!SPR.hero.swim) return;
-    const image = SPR.hero.swim;
-    SPR.hero_legs = makeCanvas(HERO_LEG_CUT, image.height, (g) => {
-      g.drawImage(image, 0, 0, HERO_LEG_CUT, image.height, 0, 0, HERO_LEG_CUT, image.height);
-    });
-    SPR.hero_body = makeCanvas(image.width - HERO_LEG_CUT, image.height, (g) => {
-      g.drawImage(image, HERO_LEG_CUT, 0, image.width - HERO_LEG_CUT, image.height,
-        0, 0, image.width - HERO_LEG_CUT, image.height);
-    });
+  function prepareHeroSwimFrames() {
+    // Match the face size and position; the source frames were drawn at different scales.
+    const poses = [
+      { name: "swim", scale: 1, faceX: 95, faceY: 23 },
+      { name: "swim_2", scale: 1.3, faceX: 97, faceY: 28 },
+      { name: "swim_3", scale: 1.4, faceX: 95, faceY: 33 },
+      { name: "swim_2", scale: 1.3, faceX: 97, faceY: 28 }
+    ];
+    SPR.hero.swimFrames = poses
+      .filter((pose) => SPR.hero[pose.name])
+      .map((pose) => ({ ...pose, image: SPR.hero[pose.name] }));
   }
 
   function loadHero() {
@@ -210,7 +210,7 @@
       if (left === 0) {
         SPR.hero.ready = Boolean(SPR.hero.swim);
         if (SPR.hero.ready) {
-          sliceHero();
+          prepareHeroSwimFrames();
         } else {
           console.warn("Hero swim sprite failed to load; using the fallback shape.");
         }
@@ -1683,32 +1683,25 @@
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     const tilt = Math.max(-0.35, Math.min(0.4, p.vy * 0.045));
-    ctx.rotate(tilt);
+    const diveTilt = Math.max(0, Math.min(0.7, (p.vy - 2.5) * 0.1));
+    ctx.rotate(tilt + diveTilt);
+    ctx.imageSmoothingEnabled = false;
 
     const pose = SPR.hero.ready && state.hurtTimer > 0
       ? (SPR.hero.hurt || SPR.hero.swim)
       : SPR.hero.ready && state.shoutPulse > 0
         ? (SPR.hero.shout || SPR.hero.swim)
-        : SPR.hero.ready && p.vy > 4.2
-          ? (SPR.hero.dive || SPR.hero.swim)
-          : null;
+        : null;
 
     if (blinking) {
       // Keep the invulnerability blink, while the damage halo below remains visible.
     } else if (pose && pose !== SPR.hero.swim) {
       ctx.drawImage(pose, -pose.width / 2, -pose.height / 2);
-    } else if (SPR.hero.ready && SPR.hero_body && SPR.hero_legs) {
-      const left = -SPR.hero.swim.width / 2;
-      const top = -SPR.hero.swim.height / 2;
-      const jointX = left + HERO_LEG_CUT;
-      ctx.drawImage(SPR.hero_body, jointX, top);
-
-      // Rotate the one pair of fins around its connection to the body.
-      ctx.save();
-      ctx.translate(jointX, 7);
-      ctx.rotate(Math.sin(state.t * 0.3) * 0.18);
-      ctx.drawImage(SPR.hero_legs, -HERO_LEG_CUT, top - 7);
-      ctx.restore();
+    } else if (SPR.hero.ready && SPR.hero.swimFrames.length) {
+      const frame = SPR.hero.swimFrames[Math.floor(state.t / 7) % SPR.hero.swimFrames.length];
+      const { image, scale, faceX, faceY } = frame;
+      ctx.drawImage(image, 28 - faceX * scale, -13 - faceY * scale,
+        image.width * scale, image.height * scale);
     } else if (SPR.hero.ready && SPR.hero.swim) {
       const img = SPR.hero.swim;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
