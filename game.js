@@ -132,6 +132,42 @@
     return c;
   }
 
+  function trimSprite(image, sx = 0, sy = 0, sw = image.width, sh = image.height) {
+    const source = document.createElement("canvas");
+    source.width = sw;
+    source.height = sh;
+    const sourceCtx = source.getContext("2d", { willReadFrequently: true });
+    sourceCtx.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+    const pixels = sourceCtx.getImageData(0, 0, sw, sh).data;
+    let left = sw;
+    let top = sh;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        if (pixels[(y * sw + x) * 4 + 3] > 16) {
+          left = Math.min(left, x);
+          top = Math.min(top, y);
+          right = Math.max(right, x);
+          bottom = Math.max(bottom, y);
+        }
+      }
+    }
+    if (right < left || bottom < top) return source;
+    const trimmed = document.createElement("canvas");
+    trimmed.width = right - left + 1;
+    trimmed.height = bottom - top + 1;
+    trimmed.getContext("2d").drawImage(source, left, top, trimmed.width, trimmed.height, 0, 0, trimmed.width, trimmed.height);
+    return trimmed;
+  }
+
+  function loadEnemyImage(path, onload) {
+    const image = new Image();
+    image.onload = () => onload(image);
+    image.onerror = () => console.warn("Could not load optional enemy sprite: " + path);
+    image.src = path;
+  }
+
   function disc(g, x, y, r, c) {
     g.fillStyle = c;
     g.beginPath();
@@ -305,7 +341,11 @@
     g.quadraticCurveTo(62, 36, 84, 30);
     g.stroke();
   }
-  SPR.shark = [makeCanvas(118, 50, (g) => drawShark(g, 0)), makeCanvas(118, 50, (g) => drawShark(g, 1))];
+  SPR.shark = [0, 1, 2, 3].map((frame) => makeCanvas(118, 50, (g) => drawShark(g, frame % 2)));
+  loadEnemyImage("assets/enemies/shark-strip.png", (image) => {
+    const frameWidth = image.width / 4;
+    SPR.shark = [0, 1, 2, 3].map((frame) => trimSprite(image, frame * frameWidth, 0, frameWidth, image.height));
+  });
 
   SPR.rocket = makeCanvas(22, 10, (g) => {
     pxBox(g, 6, 2, 14, 6, "#c04020");
@@ -319,29 +359,32 @@
     { name: "Classloader", color: "#7a4bb8", short: "CL" }
   ];
 
-  SPR.bugs = BUGS.map((b) => makeCanvas(44, 36, (g) => {
-    oval(g, 22, 20, 16, 12, b.color);
-    oval(g, 22, 18, 13, 9, "#1a1014");
-    disc(g, 16, 16, 3, "#fff");
-    disc(g, 28, 16, 3, "#fff");
-    disc(g, 16, 16, 1.4, "#111");
-    disc(g, 28, 16, 1.4, "#111");
-    g.strokeStyle = b.color;
-    g.lineWidth = 2;
-    for (let i = 0; i < 3; i++) {
-      g.beginPath();
-      g.moveTo(8, 22 + i * 3);
-      g.lineTo(2, 18 + i * 4);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(36, 22 + i * 3);
-      g.lineTo(42, 18 + i * 4);
-      g.stroke();
-    }
-    g.fillStyle = "#fff";
-    g.font = "bold 8px sans-serif";
-    g.fillText(b.short, 12, 28);
-  }));
+  SPR.bugs = BUGS.map((b, index) => {
+    const fallback = makeCanvas(44, 36, (g) => {
+      oval(g, 22, 20, 16, 12, b.color);
+      oval(g, 22, 18, 13, 9, "#1a1014");
+      disc(g, 16, 16, 3, "#fff");
+      disc(g, 28, 16, 3, "#fff");
+      disc(g, 16, 16, 1.4, "#111");
+      disc(g, 28, 16, 1.4, "#111");
+      g.strokeStyle = b.color;
+      g.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.moveTo(8, 22 + i * 3);
+        g.lineTo(2, 18 + i * 4);
+        g.stroke();
+        g.beginPath();
+        g.moveTo(36, 22 + i * 3);
+        g.lineTo(42, 18 + i * 4);
+        g.stroke();
+      }
+    });
+    loadEnemyImage("assets/enemies/" + ["bug-npe.png", "bug-stack.png", "bug-classloader.png"][index], (image) => {
+      SPR.bugs[index] = trimSprite(image);
+    });
+    return fallback;
+  });
 
   const CONNECTORS = [
     { name: "HTTP", bg: "#00a1e0" },
@@ -1156,10 +1199,24 @@
       ctx.save();
       ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
       ctx.scale(-1, 1);
-      ctx.drawImage(SPR.shark[(state.t >> 3) % 2], -e.w / 2, -e.h / 2, e.w, e.h);
+      ctx.drawImage(SPR.shark[(state.t >> 3) % SPR.shark.length], -e.w / 2, -e.h / 2, e.w, e.h);
       ctx.restore();
     } else if (e.type === "bug" && e.alive) {
-      ctx.drawImage(SPR.bugs[e.kind], e.x, e.y);
+      const sprite = SPR.bugs[e.kind];
+      const frame = (state.t >> 4) % 2;
+      const fit = Math.min((e.w + 4) / sprite.width, (e.h + 4) / sprite.height);
+      const drawW = sprite.width * fit * (frame ? 0.98 : 1);
+      const drawH = sprite.height * fit * (frame ? 1 : 0.98);
+      ctx.drawImage(sprite, e.x + (e.w - drawW) / 2, e.y + (e.h - drawH) / 2 + (frame ? 1 : -1), drawW, drawH);
+      const label = BUGS[e.kind].short;
+      ctx.font = "bold 7px monospace";
+      const labelWidth = ctx.measureText(label).width;
+      ctx.fillStyle = "rgba(7, 15, 28, 0.82)";
+      ctx.fillRect(e.x + (e.w - labelWidth - 4) / 2, e.y + e.h - 9, labelWidth + 4, 9);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.fillText(label, e.x + e.w / 2, e.y + e.h - 2);
+      ctx.textAlign = "left";
     } else if (e.type === "connector") {
       ctx.globalAlpha = e.missed ? 0.25 : (e.linked ? 0.45 : 1);
       ctx.drawImage(SPR.connectors[e.kind], e.x, e.y);
