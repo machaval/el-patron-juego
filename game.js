@@ -18,15 +18,16 @@
   };
 
   const KEY = {};
+  let showHitboxes = false;
   addEventListener("keydown", (e) => {
-    if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR"].includes(e.code)) return;
+    if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR", "KeyH"].includes(e.code)) return;
     if (e.code === "KeyX" && state.mode === "title") {
       e.preventDefault();
       resetSavedProgress();
       return;
     }
     KEY[e.code] = true;
-    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR"].includes(e.code)) e.preventDefault();
+    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
   canvas.addEventListener("pointerdown", () => { KEY.Pointer = true; });
@@ -130,35 +131,6 @@
     g.imageSmoothingEnabled = true;
     draw(g, w, h);
     return c;
-  }
-
-  function trimSprite(image, sx = 0, sy = 0, sw = image.width, sh = image.height) {
-    const source = document.createElement("canvas");
-    source.width = sw;
-    source.height = sh;
-    const sourceCtx = source.getContext("2d", { willReadFrequently: true });
-    sourceCtx.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
-    const pixels = sourceCtx.getImageData(0, 0, sw, sh).data;
-    let left = sw;
-    let top = sh;
-    let right = -1;
-    let bottom = -1;
-    for (let y = 0; y < sh; y++) {
-      for (let x = 0; x < sw; x++) {
-        if (pixels[(y * sw + x) * 4 + 3] > 16) {
-          left = Math.min(left, x);
-          top = Math.min(top, y);
-          right = Math.max(right, x);
-          bottom = Math.max(bottom, y);
-        }
-      }
-    }
-    if (right < left || bottom < top) return source;
-    const trimmed = document.createElement("canvas");
-    trimmed.width = right - left + 1;
-    trimmed.height = bottom - top + 1;
-    trimmed.getContext("2d").drawImage(source, left, top, trimmed.width, trimmed.height, 0, 0, trimmed.width, trimmed.height);
-    return trimmed;
   }
 
   function loadEnemyImage(path, onload) {
@@ -341,10 +313,15 @@
     g.quadraticCurveTo(62, 36, 84, 30);
     g.stroke();
   }
-  SPR.shark = [0, 1, 2, 3].map((frame) => makeCanvas(118, 50, (g) => drawShark(g, frame % 2)));
+  SPR.shark = [0, 1, 2, 3].map((frame) => ({
+    image: makeCanvas(118, 50, (g) => drawShark(g, frame % 2)),
+    sx: 0, sy: 0, sw: 118, sh: 50
+  }));
   loadEnemyImage("assets/enemies/shark-strip.png", (image) => {
     const frameWidth = image.width / 4;
-    SPR.shark = [0, 1, 2, 3].map((frame) => trimSprite(image, frame * frameWidth, 0, frameWidth, image.height));
+    SPR.shark = [0, 1, 2, 3].map((frame) => ({
+      image, sx: frame * frameWidth, sy: 190, sw: frameWidth, sh: 310
+    }));
   });
 
   SPR.rocket = makeCanvas(22, 10, (g) => {
@@ -381,9 +358,9 @@
       }
     });
     loadEnemyImage("assets/enemies/" + ["bug-npe.png", "bug-stack.png", "bug-classloader.png"][index], (image) => {
-      SPR.bugs[index] = trimSprite(image);
+      SPR.bugs[index] = { image, sx: 100, sy: 300, sw: 1100, sh: 700 };
     });
-    return fallback;
+    return { image: fallback, sx: 0, sy: 0, sw: 44, sh: 36 };
   });
 
   const CONNECTORS = [
@@ -1002,6 +979,10 @@
       persistSavedProgress({ reducedEffects: reducedMotion });
       updateControlLabels();
     }
+    if (KEY.KeyH) {
+      showHitboxes = !showHitboxes;
+      KEY.KeyH = false;
+    }
 
     if (state.mode === "title") {
       if (KEY.KeyC) {
@@ -1230,7 +1211,7 @@
         const swim = reducedMotion ? 0 : Math.sin(state.t * 0.055 + school + fish) * 2;
         ctx.save();
         ctx.translate(fishX + fishW / 2, schoolY + swim + fishH / 2);
-        if (school % 2) ctx.scale(-1, 1);
+        ctx.scale(-1, 1);
         ctx.drawImage(sprite, -fishW / 2, -fishH / 2, fishW, fishH);
         ctx.restore();
       }
@@ -1270,17 +1251,24 @@
       }
     } else if (e.type === "shark" && e.alive) {
       ctx.save();
+      ctx.imageSmoothingEnabled = false;
       ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
       ctx.scale(-1, 1);
-      ctx.drawImage(SPR.shark[(state.t >> 3) % SPR.shark.length], -e.w / 2, -e.h / 2, e.w, e.h);
+      const sprite = SPR.shark[(state.t >> 3) % SPR.shark.length];
+      ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, -e.w / 2, -e.h / 2, e.w, e.h);
       ctx.restore();
     } else if (e.type === "bug" && e.alive) {
       const sprite = SPR.bugs[e.kind];
       const frame = (state.t >> 4) % 2;
-      const fit = Math.min((e.w + 4) / sprite.width, (e.h + 4) / sprite.height);
-      const drawW = sprite.width * fit * (frame ? 0.98 : 1);
-      const drawH = sprite.height * fit * (frame ? 1 : 0.98);
-      ctx.drawImage(sprite, e.x + (e.w - drawW) / 2, e.y + (e.h - drawH) / 2 + (frame ? 1 : -1), drawW, drawH);
+      const fit = Math.min((e.w + 4) / sprite.sw, (e.h + 4) / sprite.sh);
+      const drawW = sprite.sw * fit * (frame ? 0.98 : 1);
+      const drawH = sprite.sh * fit * (frame ? 1 : 0.98);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(e.x + e.w / 2, e.y + e.h / 2 + (frame ? 1 : -1));
+      ctx.scale(-1, 1);
+      ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
       const label = BUGS[e.kind].short;
       ctx.font = "bold 7px monospace";
       const labelWidth = ctx.measureText(label).width;
@@ -1341,6 +1329,25 @@
       const frame = s.fire > 0 ? SPR.side.fire : (s.kick ? SPR.side.kickA : SPR.side.kickB);
       ctx.drawImage(frame, s.x, s.y);
     }
+  }
+
+  function drawDebugHitboxes() {
+    const p = state.player;
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#ff5577";
+    ctx.strokeRect(p.x + 12 + 0.5, p.y + 8 + 0.5, p.w - 24, p.h - 14);
+    for (const e of state.ents) {
+      if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt"].includes(e.type)) continue;
+      ctx.strokeStyle = e.type === "connector" ? "#7fd7ff" : "#ffe680";
+      ctx.strokeRect(e.x + 0.5, e.y + 0.5, e.w, e.h);
+    }
+    ctx.fillStyle = "rgba(4, 16, 24, 0.85)";
+    ctx.fillRect(8, 42, 112, 18);
+    ctx.fillStyle = "#ff9aae";
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.fillText("HITBOX DEBUG [H]", 12, 55);
+    ctx.restore();
   }
 
   function drawHud() {
@@ -1471,6 +1478,8 @@
         ctx.globalAlpha = 1;
       }
     }
+
+    if (showHitboxes) drawDebugHitboxes();
 
     if (state.banner && state.bannerLife > 0) {
       ctx.globalAlpha = Math.min(1, state.bannerLife / 18);
