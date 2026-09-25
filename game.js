@@ -159,6 +159,14 @@
     g.fill();
   }
 
+  function strokeOval(g, x, y, rx, ry, c, w) {
+    g.strokeStyle = c;
+    g.lineWidth = w || 1;
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
+
   const SPR = { hero: { ready: false }, side: {}, hero_body: null, hero_legs: null };
   SPR.lifeIcon = makeCanvas(40, 40, (g) => {
     g.fillStyle = "#00a1e0";
@@ -223,28 +231,56 @@
   }
   loadHero();
 
-  function drawSidekick(g, kick, fire) {
-    oval(g, 22, 26, 11, 14, "#143848");
-    oval(g, 22, 24, 7, 6, "#00a1e0");
-    disc(g, 22, 24, 2.4, "#0c2c3c");
-    disc(g, 22, 13, 7, "#2a1c12");
-    disc(g, 22, 14.5, 6.2, "#e8b898");
-    oval(g, 22, 10.5, 6.4, 2.8, "#3a2818");
-    disc(g, 20, 14.2, 1, "#1a1410");
-    disc(g, 25, 14.2, 1, "#1a1410");
-    oval(g, 8, 28, 5, 2.2, "#0a2430");
-    oval(g, 8 + kick, 29, 6, 2.2, "#00a1e0");
-    oval(g, 10, 36, 5, 2.2, "#0a2430");
-    oval(g, 10 - kick, 37, 6, 2.2, "#00a1e0");
-    oval(g, 34, 26, 3, 2, "#e8b898");
-    if (fire) {
-      pxBox(g, 32, 22, 18, 7, "#3a3a3a");
-      pxBox(g, 48, 23, 8, 5, "#6a6a6a");
-      pxBox(g, 54, 24, 8, 3, "#c04020");
+  function drawSidekick(ctx, x, y, t, fire, idx) {
+    ctx.save();
+    ctx.translate(x + 32, y + 23);
+    
+    // Draw scuba tank on back
+    oval(ctx, -14, -4, 4, 10, "#5a6270");
+    pxBox(ctx, -17, -8, 6, 2, "#9aa2a8"); // tank valve
+    
+    // Leg 2 (back leg) - animated!
+    ctx.save();
+    ctx.translate(-10, 8);
+    ctx.rotate(Math.sin(t * 0.3 + idx * 1.5) * 0.35);
+    oval(ctx, -6, 2, 8, 3.2, "#0c1822");
+    oval(ctx, -14, 2, 7, 2.5, "#0a3a55"); // dark blue flipper
+    ctx.restore();
+
+    // Leg 1 (front leg) - animated!
+    ctx.save();
+    ctx.translate(-10, 8);
+    ctx.rotate(-Math.sin(t * 0.3 + idx * 1.5) * 0.35);
+    oval(ctx, -6, 2, 8, 3.2, "#1a2630"); // grey wetsuit thigh
+    oval(ctx, -14, 2, 7, 2.5, "#00a1e0"); // bright blue flipper
+    ctx.restore();
+
+    // Torso (dark wetsuit with Salesforce blue highlight)
+    oval(ctx, 0, 2, 12, 10, "#1a2630");
+    oval(ctx, 2, 2, 8, 6, "#00a1e0"); // Salesforce blue badge
+    
+    // Head and face
+    disc(ctx, 12, -8, 6.5, "#2a1c12"); // hair
+    disc(ctx, 12, -6, 5.8, "#e8b898"); // skin face
+    pxBox(ctx, 9, -9, 4, 2, "#3a2818"); // hair fringe
+    disc(ctx, 14, -6, 1, "#111"); // eye
+    
+    // Mask
+    oval(ctx, 14, -6, 4, 2.5, "rgba(180, 230, 255, 0.4)");
+    strokeOval(ctx, 14, -6, 4, 2.5, "rgba(180, 230, 255, 0.7)", 1);
+
+    // Arm and Bazooka
+    if (fire > 0) {
+      ctx.translate(Math.random() * 2 - 1, Math.random() * 2 - 1);
+      pxBox(ctx, 0, -2, 24, 7, "#333333"); // bazooka barrel
+      pxBox(ctx, 22, -3, 4, 9, "#c04020"); // red tip
+      oval(ctx, 6, 4, 7, 3, "#1a2630"); // arm holding bazooka
     } else {
-      pxBox(g, 32, 23, 14, 6, "#3a3a3a");
-      pxBox(g, 44, 24, 6, 4, "#6a6a6a");
+      pxBox(ctx, 0, 2, 20, 6, "#3a3a3a"); // folded launcher
+      oval(ctx, 6, 5, 6, 2.5, "#1a2630"); // resting arm
     }
+    
+    ctx.restore();
   }
 
   function pxBox(g, x, y, w, h, c) {
@@ -252,10 +288,10 @@
     g.fillRect(x, y, w, h);
   }
 
-  SPR.side.idle = makeCanvas(64, 46, (g) => drawSidekick(g, 0, false));
-  SPR.side.kickA = makeCanvas(64, 46, (g) => drawSidekick(g, 4, false));
-  SPR.side.kickB = makeCanvas(64, 46, (g) => drawSidekick(g, -4, false));
-  SPR.side.fire = makeCanvas(70, 46, (g) => drawSidekick(g, 2, true));
+  SPR.side.idle = null; // cleaned up
+  SPR.side.kickA = null;
+  SPR.side.kickB = null;
+  SPR.side.fire = null;
 
   function sapCannon(g) {
     pxBox(g, 14, 4, 34, 56, "#082a2b");
@@ -1652,7 +1688,7 @@
     if (SPR.hero.ready && SPR.hero_body && SPR.hero_legs) {
       // Leg 2 (back leg, shaded slightly darker)
       ctx.save();
-      ctx.translate(-14.5, 7);
+      ctx.translate(-49.5, 7);
       ctx.rotate(Math.sin(state.t * 0.3) * 0.24);
       ctx.drawImage(SPR.hero_legs, -35, -43);
       ctx.fillStyle = "rgba(0, 0, 0, 0.22)"; // slight depth shade
@@ -1662,7 +1698,7 @@
 
       // Leg 1 (front leg)
       ctx.save();
-      ctx.translate(-14.5, 7);
+      ctx.translate(-49.5, 7);
       ctx.rotate(-Math.sin(state.t * 0.3) * 0.24);
       ctx.drawImage(SPR.hero_legs, -35, -43);
       ctx.restore();
@@ -1695,10 +1731,9 @@
   }
 
   function drawSquad() {
-    for (const s of state.squad) {
-      const frame = s.fire > 0 ? SPR.side.fire : (s.kick ? SPR.side.kickA : SPR.side.kickB);
-      ctx.drawImage(frame, s.x, s.y);
-    }
+    state.squad.forEach((s, idx) => {
+      drawSidekick(ctx, s.x, s.y, state.t, s.fire, idx);
+    });
   }
 
   function drawDebugHitboxes() {
