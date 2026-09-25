@@ -1,0 +1,53 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 0%, #12344a 0%, #041018 55%, #02080c 100%);
+  color: #cde8f5;
+  font-family: "VT323", monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#frame {
+  position: relative;
+  box-shadow:
+    0 0 0 4px #16384a,
+    0 0 0 8px #0b1c26,
+    0 24px 80px rgba(0, 0, 0, 0.65),
+    0 0 60px rgba(20, 140, 180, 0.18);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#game {
+  display: block;
+  width: min(96vw, 1280px);
+  height: auto;
+  background: #031018;
+}
+
+#scanlines {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.03) 0px,
+    rgba(255,255,255,0.03) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  mix-blend-mode: overlay;
+}
+
+#hint {
+  margin-top: 14px;
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: #7fb4c8;
+  text-shadow: 0 2px 0 #021018;
+}
