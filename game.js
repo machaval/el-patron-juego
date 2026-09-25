@@ -1010,10 +1010,6 @@
   }
 
   function damage() {
-    if (state.devRun && DEV.enabled && DEV.godMode) {
-      state.health = state.maxHealth;
-      return;
-    }
     if (state.invuln > 0) return;
     state.health--;
     state.invuln = 70;
@@ -1024,8 +1020,13 @@
     audio.hit();
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
     if (state.health <= 0) {
-      state.mode = "dead";
-      if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+      if (state.devRun && DEV.enabled && DEV.godMode) {
+        state.health = state.maxHealth;
+        addScoreEffect(state.player.x + 35, state.player.y - 12, "LIVES RESTORED", "#71dfaa");
+      } else {
+        state.mode = "dead";
+        if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+      }
     }
   }
 
@@ -1092,7 +1093,6 @@
         KEY.KeyG = false;
         DEV.godMode = !DEV.godMode;
         if (DEV.godMode) {
-          state.health = state.maxHealth;
           if (state.mode !== "title") state.devRun = true;
         }
       }
