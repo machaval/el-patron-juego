@@ -48,7 +48,7 @@
       <rect x="2" y="18" width="6" height="7" fill="#7fd7ff"/>
     </symbol>
     <symbol id="mule" viewBox="0 0 40 40">
-      <path fill="#00a1e0" d="M12 3h6v11h5V5h7v13h4v12h-5v6H17v-5h-6v-5H6v-7H2v-7h9v-4h1z"/>
+      <image href="../assets/ui/mule-life.png" x="0" y="0" width="40" height="40" preserveAspectRatio="xMidYMid meet"/>
     </symbol>
     <style>
       text { font-family: monospace; }

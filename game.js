@@ -155,6 +155,24 @@
   }
 
   const SPR = { hero: { ready: false }, side: {} };
+  SPR.lifeIcon = makeCanvas(40, 40, (g) => {
+    g.fillStyle = "#00a1e0";
+    g.beginPath();
+    g.moveTo(5, 1);
+    g.lineTo(19, 20);
+    g.lineTo(25, 20);
+    g.lineTo(35, 1);
+    g.quadraticCurveTo(43, 25, 30, 30);
+    g.lineTo(34, 37);
+    g.quadraticCurveTo(20, 43, 6, 37);
+    g.lineTo(10, 30);
+    g.quadraticCurveTo(-3, 24, 5, 1);
+    g.fill();
+  });
+  const lifeIconImage = new Image();
+  lifeIconImage.onload = () => { SPR.lifeIcon = lifeIconImage; };
+  lifeIconImage.onerror = () => console.warn("Could not load life icon: assets/ui/mule-life.png");
+  lifeIconImage.src = "assets/ui/mule-life.png";
 
   function loadHero() {
     const names = ["idle", "swim", "swim_2", "swim_3", "shout", "dive", "hurt", "thumbs", "ray"];
@@ -713,8 +731,8 @@
     score: 0,
     vested: 0,
     levelStartVested: 0,
-    health: 3,
-    maxHealth: 3,
+    health: 5,
+    maxHealth: 5,
     trabajeen: 3,
     shoutPulse: 0,
     shoutText: 0,
@@ -1016,7 +1034,7 @@
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
     state.score = 0;
-    state.health = 3;
+    state.health = state.maxHealth;
     if (!fromCheckpoint) {
       state.level = 0;
       state.vested = 0;
@@ -1555,9 +1573,17 @@
       ctx.fillRect(668 + i * 12, 10, 10, 16);
     }
 
+    ctx.fillStyle = "#cde8f5";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("LIVES", 762, 22);
+    const lifeIconSize = 21;
+    const lifeIconGap = 25;
+    const livesStartX = W - 14 - state.maxHealth * lifeIconGap;
     for (let i = 0; i < state.maxHealth; i++) {
-      ctx.fillStyle = i < state.health ? "#3ecf8e" : "#1a3030";
-      ctx.fillRect(W - 22 - i * 18, 10, 14, 16);
+      ctx.save();
+      ctx.globalAlpha = i < state.health ? 1 : 0.2;
+      ctx.drawImage(SPR.lifeIcon, livesStartX + i * lifeIconGap, 7, lifeIconSize, lifeIconSize);
+      ctx.restore();
     }
 
     if (L.connectors) {
