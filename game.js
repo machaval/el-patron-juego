@@ -167,6 +167,7 @@
     g.stroke();
   }
 
+  const HERO_LEG_CUT = 40;
   const SPR = { hero: { ready: false }, side: {}, hero_body: null, hero_legs: null };
   SPR.lifeIcon = makeCanvas(40, 40, (g) => {
     g.fillStyle = "#00a1e0";
@@ -188,21 +189,14 @@
   lifeIconImage.src = "assets/ui/mule-life.png";
   function sliceHero() {
     if (!SPR.hero.swim) return;
-    const sliceFrame = (image) => {
-      if (!image) return null;
-      return {
-        legs: makeCanvas(35, 72, (g) => {
-          g.drawImage(image, 0, 0, 35, 72, 0, 0, 35, 72);
-        }),
-        body: makeCanvas(99, 72, (g) => {
-          g.drawImage(image, 35, 0, 99, 72, 0, 0, 99, 72);
-        })
-      };
-    };
-    SPR.hero.swimFrames = ["swim", "swim_3", "swim_2", "swim_3"]
-      .map((name) => sliceFrame(SPR.hero[name] || SPR.hero.swim));
-    SPR.hero_legs = SPR.hero.swimFrames[0].legs;
-    SPR.hero_body = SPR.hero.swimFrames[0].body;
+    const image = SPR.hero.swim;
+    SPR.hero_legs = makeCanvas(HERO_LEG_CUT, image.height, (g) => {
+      g.drawImage(image, 0, 0, HERO_LEG_CUT, image.height, 0, 0, HERO_LEG_CUT, image.height);
+    });
+    SPR.hero_body = makeCanvas(image.width - HERO_LEG_CUT, image.height, (g) => {
+      g.drawImage(image, HERO_LEG_CUT, 0, image.width - HERO_LEG_CUT, image.height,
+        0, 0, image.width - HERO_LEG_CUT, image.height);
+    });
   }
 
   function loadHero() {
@@ -1703,28 +1697,18 @@
       // Keep the invulnerability blink, while the damage halo below remains visible.
     } else if (pose && pose !== SPR.hero.swim) {
       ctx.drawImage(pose, -pose.width / 2, -pose.height / 2);
-    } else if (SPR.hero.ready && SPR.hero.swimFrames) {
-      const frameIndex = Math.floor(state.t / 6) % SPR.hero.swimFrames.length;
-      const frame = SPR.hero.swimFrames[frameIndex];
-      // Leg 2 (back leg, shaded slightly darker)
-      ctx.save();
-      ctx.translate(-49.5, 7);
-      ctx.rotate(Math.sin(state.t * 0.3) * 0.24);
-      ctx.drawImage(frame.legs, -35, -43);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.22)"; // slight depth shade
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.fillRect(-35, -43, 35, 72);
-      ctx.restore();
+    } else if (SPR.hero.ready && SPR.hero_body && SPR.hero_legs) {
+      const left = -SPR.hero.swim.width / 2;
+      const top = -SPR.hero.swim.height / 2;
+      const jointX = left + HERO_LEG_CUT;
+      ctx.drawImage(SPR.hero_body, jointX, top);
 
-      // Leg 1 (front leg)
+      // Rotate the one pair of fins around its connection to the body.
       ctx.save();
-      ctx.translate(-49.5, 7);
-      ctx.rotate(-Math.sin(state.t * 0.3) * 0.24);
-      ctx.drawImage(frame.legs, -35, -43);
+      ctx.translate(jointX, 7);
+      ctx.rotate(Math.sin(state.t * 0.3) * 0.18);
+      ctx.drawImage(SPR.hero_legs, -HERO_LEG_CUT, top - 7);
       ctx.restore();
-
-      // Body (torso, head, arms, tank)
-      ctx.drawImage(frame.body, -49.5, -36);
     } else if (SPR.hero.ready && SPR.hero.swim) {
       const img = SPR.hero.swim;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
