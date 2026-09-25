@@ -403,22 +403,24 @@
     { name: "DW", bg: "#00a1e0" }
   ];
 
-  SPR.connectors = CONNECTORS.map((c) => makeCanvas(36, 36, (g) => {
-    pxBox(g, 9, 0, 18, 3, "#c4f3e7");
-    pxBox(g, 3, 3, 30, 4, "#163b46");
-    pxBox(g, 0, 9, 36, 18, "#163b46");
-    pxBox(g, 3, 29, 30, 4, "#163b46");
-    pxBox(g, 9, 33, 18, 3, "#c4f3e7");
-    pxBox(g, 4, 10, 28, 16, c.bg);
-    pxBox(g, 8, 5, 20, 4, c.bg);
-    pxBox(g, 8, 27, 20, 4, c.bg);
-    pxBox(g, 6, 11, 24, 3, "rgba(255,255,255,0.42)");
-    pxBox(g, 6, 24, 24, 2, "rgba(2,20,30,0.45)");
-    pxBox(g, 8, 15, 20, 9, "#092631");
+  const CONNECTOR_SIZE = 44;
+  const CONNECTOR_CENTER = CONNECTOR_SIZE / 2;
+  SPR.connectors = CONNECTORS.map((c) => makeCanvas(CONNECTOR_SIZE, CONNECTOR_SIZE, (g) => {
+    pxBox(g, 12, 0, 20, 3, "#c4f3e7");
+    pxBox(g, 4, 3, 36, 5, "#163b46");
+    pxBox(g, 1, 10, 42, 24, "#163b46");
+    pxBox(g, 4, 36, 36, 5, "#163b46");
+    pxBox(g, 12, 41, 20, 3, "#c4f3e7");
+    pxBox(g, 5, 10, 34, 25, c.bg);
+    pxBox(g, 9, 6, 26, 4, c.bg);
+    pxBox(g, 9, 35, 26, 4, c.bg);
+    pxBox(g, 7, 11, 30, 3, "rgba(255,255,255,0.42)");
+    pxBox(g, 7, 31, 30, 2, "rgba(2,20,30,0.45)");
+    pxBox(g, 5, 16, 34, 14, "#092631");
     g.fillStyle = "#eafff8";
-    g.font = "bold 8px monospace";
+    g.font = "bold 10px monospace";
     const tw = g.measureText(c.name).width;
-    g.fillText(c.name, 18 - tw / 2, 21);
+    g.fillText(c.name, CONNECTOR_CENTER - tw / 2, 26);
   }));
 
   const GATE_DESIGNS = [
@@ -777,6 +779,15 @@
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
+  function connectorPickupBox(player) {
+    return {
+      x: player.x - 34,
+      y: player.y + 2,
+      w: player.w + 22,
+      h: player.h + 12
+    };
+  }
+
   function burst(x, y, c, n) {
     for (let i = 0; i < n; i++) {
       const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
@@ -903,9 +914,9 @@
         let maxY = Math.min(H - 112, previousConnectorY + 150);
         for (const cannon of state.ents) {
           if (cannon.type !== "cannon" || cannon.side !== "top") continue;
-          if (x + 32 <= cannon.x || x >= cannon.x + cannon.w) continue;
+          if (x + CONNECTOR_SIZE <= cannon.x || x >= cannon.x + cannon.w) continue;
           minY = Math.max(minY, cannon.gy + 8);
-          maxY = Math.min(maxY, cannon.gy + cannon.gap - 40);
+          maxY = Math.min(maxY, cannon.gy + cannon.gap - CONNECTOR_SIZE - 8);
         }
         if (minY <= maxY) {
           chosen = { x, y: minY + random() * (maxY - minY) };
@@ -920,7 +931,7 @@
         type: "connector", kind: i % CONNECTORS.length,
         x: chosen.x,
         y: chosen.y,
-        w: 32, h: 32, linked: false, missed: false, alive: true
+        w: CONNECTOR_SIZE, h: CONNECTOR_SIZE, linked: false, missed: false, alive: true
       });
       previousConnectorX = chosen.x;
       previousConnectorY = chosen.y;
@@ -1221,6 +1232,7 @@
 
     const scroll = L.speed;
     const hitbox = { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
+    const connectorPickup = connectorPickupBox(p);
     let activeBolts = state.ents.filter((entity) => entity.type === "bolt" && entity.alive).length;
 
     for (const e of state.ents) {
@@ -1281,29 +1293,31 @@
         if (e.x < -20 || e.y > H) e.alive = false;
       }
 
-      if (e.type === "connector" && !e.linked && !e.missed && aabb(hitbox, e)) {
+      if (e.type === "connector" && !e.linked && !e.missed && aabb(connectorPickup, e)) {
         e.linked = true;
         state.linked++;
         state.score += 120;
-        addEffect({ type: "ring", x: e.x + 16, y: e.y + 16, color: "#7fd7ff", life: 24, duration: 24 });
-        addScoreEffect(e.x + 16, e.y + 4, "+120", "#7fd7ff");
+        const connectorX = e.x + CONNECTOR_CENTER;
+        const connectorY = e.y + CONNECTOR_CENTER;
+        addEffect({ type: "ring", x: connectorX, y: connectorY, color: "#7fd7ff", life: 24, duration: 24 });
+        addScoreEffect(connectorX, e.y + 4, "+120", "#7fd7ff");
         audio.link();
-        burst(e.x + 16, e.y + 16, "#7fd7ff", 10);
+        burst(connectorX, connectorY, "#7fd7ff", 10);
         const prev = state.ents.filter((o) => o.type === "connector" && o.linked);
         if (prev.length > 1) {
           const a = prev[prev.length - 2];
           state.links.push({
-            ax: a.x + 16, ay: a.y + 16,
-            bx: e.x + 16, by: e.y + 16
+            ax: a.x + CONNECTOR_CENTER, ay: a.y + CONNECTOR_CENTER,
+            bx: connectorX, by: connectorY
           });
         }
         banner("LINKED " + state.linked + "/" + state.needLink);
       }
 
-      if (e.type === "connector" && !e.linked && !e.missed && e.x + e.w < hitbox.x) {
+      if (e.type === "connector" && !e.linked && !e.missed && e.x + e.w < connectorPickup.x) {
         e.missed = true;
         damage();
-        burst(e.x + 16, e.y + 16, "#ff6080", 8);
+        burst(e.x + CONNECTOR_CENTER, e.y + CONNECTOR_CENTER, "#ff6080", 8);
         banner("MISSED CONNECTOR");
       }
 
@@ -1528,16 +1542,16 @@
       if (!e.linked && !e.missed) {
         const pulse = reducedMotion ? 0 : (state.t >> 3) % 2;
         ctx.fillStyle = pulse ? "#b8f9ec" : "#67cabd";
-        ctx.fillRect(e.x + 12, e.y - 5, 12, 3);
-        ctx.fillRect(e.x + 12, e.y + 34, 12, 3);
-        ctx.fillRect(e.x - 5, e.y + 12, 3, 12);
-        ctx.fillRect(e.x + 34, e.y + 12, 3, 12);
+        ctx.fillRect(e.x + CONNECTOR_CENTER - 6, e.y - 5, 12, 3);
+        ctx.fillRect(e.x + CONNECTOR_CENTER - 6, e.y + e.h + 2, 12, 3);
+        ctx.fillRect(e.x - 5, e.y + CONNECTOR_CENTER - 6, 3, 12);
+        ctx.fillRect(e.x + e.w + 2, e.y + CONNECTOR_CENTER - 6, 3, 12);
       }
-      ctx.drawImage(SPR.connectors[e.kind], e.x - 2, e.y - 2);
+      ctx.drawImage(SPR.connectors[e.kind], e.x, e.y, e.w, e.h);
       if (e.linked) {
         ctx.fillStyle = "#b8f9ec";
         ctx.fillRect(e.x + 2, e.y + 2, 5, 3);
-        ctx.fillRect(e.x + 27, e.y + 27, 5, 3);
+        ctx.fillRect(e.x + e.w - 7, e.y + e.h - 7, 5, 3);
       }
       ctx.restore();
     } else if (e.type === "bolt" && e.alive) {
@@ -1590,6 +1604,9 @@
     ctx.lineWidth = 1;
     ctx.strokeStyle = "#ff5577";
     ctx.strokeRect(p.x + 12 + 0.5, p.y + 8 + 0.5, p.w - 24, p.h - 14);
+    const pickup = connectorPickupBox(p);
+    ctx.strokeStyle = "#66e0ff";
+    ctx.strokeRect(pickup.x + 0.5, pickup.y + 0.5, pickup.w, pickup.h);
     for (const e of state.ents) {
       if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt"].includes(e.type)) continue;
       ctx.strokeStyle = e.type === "connector" ? "#7fd7ff" : "#ffe680";
@@ -1658,7 +1675,7 @@
     if (!nodes.length && !state.needLink) return;
     const p = state.player;
     ctx.save();
-    const points = nodes.map((n) => ({ x: n.x + 16, y: n.y + 16 }));
+    const points = nodes.map((n) => ({ x: n.x + CONNECTOR_CENTER, y: n.y + CONNECTOR_CENTER }));
     points.push({ x: p.x + 8, y: p.y + p.h / 2 + 6 });
     ctx.strokeStyle = "#092832";
     ctx.lineWidth = 7;
