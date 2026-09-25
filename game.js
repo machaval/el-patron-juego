@@ -196,7 +196,22 @@
     ];
     SPR.hero.swimFrames = poses
       .filter((pose) => SPR.hero[pose.name])
-      .map((pose) => ({ ...pose, image: SPR.hero[pose.name] }));
+      .map((pose) => {
+        const image = SPR.hero[pose.name];
+        const armX = 110;
+        const armY = 33;
+        const armTop = 20;
+        const armHeight = 25;
+        const body = makeCanvas(image.width, image.height, (g) => {
+          g.drawImage(image, 0, 0);
+          g.clearRect(armX, armTop, image.width - armX, armHeight);
+        });
+        const arm = makeCanvas(image.width - armX, armHeight, (g) => {
+          g.drawImage(image, armX, armTop, image.width - armX, armHeight,
+            0, 0, image.width - armX, armHeight);
+        });
+        return { ...pose, image, body, arm, armX, armY, armTop };
+      });
   }
 
   function loadHero() {
@@ -1699,9 +1714,16 @@
       ctx.drawImage(pose, -pose.width / 2, -pose.height / 2);
     } else if (SPR.hero.ready && SPR.hero.swimFrames.length) {
       const frame = SPR.hero.swimFrames[Math.floor(state.t / 7) % SPR.hero.swimFrames.length];
-      const { image, scale, faceX, faceY } = frame;
-      ctx.drawImage(image, 28 - faceX * scale, -13 - faceY * scale,
-        image.width * scale, image.height * scale);
+      const { image, body, arm, armX, armY, armTop, scale, faceX, faceY } = frame;
+      const drawX = 28 - faceX * scale;
+      const drawY = -13 - faceY * scale;
+      ctx.drawImage(body, drawX, drawY, image.width * scale, image.height * scale);
+      ctx.save();
+      ctx.translate(drawX + armX * scale, drawY + armY * scale);
+      ctx.rotate(Math.sin(state.t * Math.PI / 14) * 0.32);
+      ctx.drawImage(arm, 0, (armTop - armY) * scale,
+        arm.width * scale, arm.height * scale);
+      ctx.restore();
     } else if (SPR.hero.ready && SPR.hero.swim) {
       const img = SPR.hero.swim;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
