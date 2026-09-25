@@ -658,13 +658,17 @@
     return (runSeed ^ Math.imul(level + 1, 0x9e3779b9)) >>> 0;
   }
 
+  const VESTING_DISTANCE_STEP = 24;
+
   const state = {
     mode: "title",
     level: 0,
     t: 0,
     dist: 0,
+    distanceVested: 0,
     score: 0,
     vested: 0,
+    levelStartVested: 0,
     health: 3,
     maxHealth: 3,
     trabajeen: 3,
@@ -729,6 +733,7 @@
   function spawnLevel() {
     const L = LEVELS[state.level];
     const random = createSeededRandom(levelSeed(state.runSeed, state.level));
+    state.levelStartVested = state.vested;
     state.ents = [];
     state.parts = [];
     state.effects = [];
@@ -739,6 +744,7 @@
     state.linked = 0;
     state.needLink = L.connectors;
     state.dist = 0;
+    state.distanceVested = 0;
     state.trabajeen = L.shouts ?? 3;
     state.shoutPulse = 0;
     state.shoutText = 0;
@@ -925,15 +931,18 @@
     state.shakeDuration = 10;
     audio.hit();
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
-    if (state.health <= 0) state.mode = "dead";
+    if (state.health <= 0) {
+      state.mode = "dead";
+      persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+    }
   }
 
   function finishLevel() {
     if (state.finishing || state.health <= 0) return;
     state.finishing = true;
-    const gained = 200 + state.score + state.linked * 80 + state.health * 50;
-    state.transitionReward = gained;
-    state.vested += gained;
+    const completionBonus = 200 + state.score + state.linked * 80 + state.health * 50;
+    state.transitionReward = state.distanceVested + completionBonus;
+    state.vested += completionBonus;
     persistSavedProgress({
       bestVested: Math.max(savedProgress.bestVested, state.vested),
       highestUnlockedLevel: Math.max(savedProgress.highestUnlockedLevel, Math.min(state.level + 1, LEVELS.length - 1))
@@ -949,6 +958,7 @@
   }
 
   function startGame(fromCheckpoint, checkpointLevel, runSeed) {
+    const retryingAfterDeath = state.mode === "dead";
     audio.ensure();
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
@@ -961,6 +971,7 @@
     } else {
       state.level = Math.max(0, Math.min(LEVELS.length - 1, checkpointLevel ?? state.checkpoint ?? 0));
       state.checkpoint = state.level;
+      if (retryingAfterDeath) state.vested = state.levelStartVested;
     }
     spawnLevel();
     updateControlLabels();
@@ -1047,6 +1058,11 @@
     if (p.y > H - 56) { p.y = H - 56; damage(); p.vy = -3; }
 
     state.dist += L.speed;
+    const distanceVested = Math.min(Math.floor(state.dist / VESTING_DISTANCE_STEP), Math.floor(L.length / VESTING_DISTANCE_STEP));
+    if (distanceVested > state.distanceVested) {
+      state.vested += distanceVested - state.distanceVested;
+      state.distanceVested = distanceVested;
+    }
     if (state.kick > 0) state.kick--;
     if (state.shoutPulse > 0) state.shoutPulse--;
     if (state.shoutText > 0) state.shoutText--;
@@ -1191,19 +1207,38 @@
     }
     ctx.restore();
 
+    const farOffset = ((state.dist * 0.09) % 240 + 240) % 240;
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = "#17404a";
+    for (let x = -240 - farOffset; x < W + 240; x += 240) {
+      ctx.beginPath();
+      ctx.moveTo(x, H - 16);
+      ctx.lineTo(x + 12, H - 66);
+      ctx.lineTo(x + 44, H - 84);
+      ctx.lineTo(x + 82, H - 58);
+      ctx.lineTo(x + 126, H - 112);
+      ctx.lineTo(x + 166, H - 70);
+      ctx.lineTo(x + 210, H - 92);
+      ctx.lineTo(x + 240, H - 16);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
     // Decorative fish stay in the background and never enter entity or collision state.
     const fishTrack = W + 220;
     const fishParallax = state.dist * 0.18;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    for (let school = 0; school < 8; school++) {
-      const wrappedX = ((school * 171 + 42 - fishParallax) % fishTrack + fishTrack) % fishTrack;
+    for (let school = 0; school < 6; school++) {
+      const wrappedX = ((school * 217 + 42 - fishParallax) % fishTrack + fishTrack) % fishTrack;
       const schoolX = wrappedX - 110;
       const schoolY = 82 + (school * 71) % 330;
       const kind = school % FISH_PALETTES.length;
-      const count = 2 + school % 3;
-      const size = 0.72 + (school % 2) * 0.12;
-      ctx.globalAlpha = 0.22 + (school % 2) * 0.04;
+      const count = 2 + school % 2;
+      const size = 0.44 + (school % 2) * 0.1;
+      ctx.globalAlpha = 0.24 + (school % 2) * 0.05;
       for (let fish = 0; fish < count; fish++) {
         const sprite = SPR.fish[kind][reducedMotion ? 0 : (Math.floor(state.t / 8) + fish + school) % 2];
         const fishW = sprite.width * size;
@@ -1216,6 +1251,29 @@
         ctx.drawImage(sprite, -fishW / 2, -fishH / 2, fishW, fishH);
         ctx.restore();
       }
+    }
+    ctx.restore();
+
+    const kelpTrack = W + 180;
+    ctx.save();
+    ctx.globalAlpha = 0.24;
+    ctx.strokeStyle = "#1a5654";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "square";
+    for (let kelp = 0; kelp < 9; kelp++) {
+      const wrappedX = ((kelp * 137 + 28 - state.dist * 0.42) % kelpTrack + kelpTrack) % kelpTrack;
+      const x = wrappedX - 90;
+      const height = 28 + (kelp * 17) % 38;
+      const sway = reducedMotion ? 0 : Math.sin(state.t * 0.025 + kelp) * 3;
+      ctx.beginPath();
+      ctx.moveTo(x, H - 16);
+      ctx.lineTo(x + 3, H - 16 - height * 0.5);
+      ctx.lineTo(x + sway, H - 16 - height);
+      ctx.moveTo(x + 3, H - 16 - height * 0.5);
+      ctx.lineTo(x - 10 + sway, H - 20 - height * 0.7);
+      ctx.moveTo(x + 2, H - 18 - height * 0.7);
+      ctx.lineTo(x + 12 + sway, H - 18 - height * 0.85);
+      ctx.stroke();
     }
     ctx.restore();
 
