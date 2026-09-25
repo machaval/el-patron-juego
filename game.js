@@ -1336,6 +1336,17 @@
         ctx.fillStyle = "#0a2933";
         ctx.fillRect(e.x + 20, y + 16, 9, 3);
       }
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      for (let y = bodyY + 22; y + 12 < bodyY + bodyH; y += 92) {
+        ctx.fillStyle = "#08272f";
+        ctx.fillRect(e.x + 16, y, 25, 12);
+        ctx.fillStyle = "#c4e6c5";
+        ctx.fillText("SAP", e.x + 28.5, y + 9);
+        ctx.fillStyle = "#e3b34f";
+        ctx.fillRect(e.x + 15, y + 2, 2, 8);
+      }
+      ctx.textAlign = "left";
       if (e.side === "top") {
         ctx.drawImage(SPR.cannonL, e.x, e.h - 52);
       } else {
