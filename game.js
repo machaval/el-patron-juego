@@ -495,7 +495,7 @@
       gravity: 0.32,
       flap: -5.8,
       cannons: true,
-      fire: true,
+      fire: false,
       sharks: 3,
       bugs: true,
       connectors: 7,
