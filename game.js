@@ -188,15 +188,21 @@
   lifeIconImage.src = "assets/ui/mule-life.png";
   function sliceHero() {
     if (!SPR.hero.swim) return;
-    const swimImg = SPR.hero.swim;
-    // Leg slice (width 35, height 72)
-    SPR.hero_legs = makeCanvas(35, 72, (g) => {
-      g.drawImage(swimImg, 0, 0, 35, 72, 0, 0, 35, 72);
-    });
-    // Body slice (width 99, height 72)
-    SPR.hero_body = makeCanvas(99, 72, (g) => {
-      g.drawImage(swimImg, 35, 0, 99, 72, 0, 0, 99, 72);
-    });
+    const sliceFrame = (image) => {
+      if (!image) return null;
+      return {
+        legs: makeCanvas(35, 72, (g) => {
+          g.drawImage(image, 0, 0, 35, 72, 0, 0, 35, 72);
+        }),
+        body: makeCanvas(99, 72, (g) => {
+          g.drawImage(image, 35, 0, 99, 72, 0, 0, 99, 72);
+        })
+      };
+    };
+    SPR.hero.swimFrames = ["swim", "swim_3", "swim_2", "swim_3"]
+      .map((name) => sliceFrame(SPR.hero[name] || SPR.hero.swim));
+    SPR.hero_legs = SPR.hero.swimFrames[0].legs;
+    SPR.hero_body = SPR.hero.swimFrames[0].body;
   }
 
   function loadHero() {
@@ -1678,19 +1684,33 @@
 
   function drawHero() {
     const p = state.player;
-    if (state.invuln > 0 && state.t % 6 < 2) return;
+    const blinking = state.invuln > 0 && state.t % 6 < 2;
 
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     const tilt = Math.max(-0.35, Math.min(0.4, p.vy * 0.045));
     ctx.rotate(tilt);
 
-    if (SPR.hero.ready && SPR.hero_body && SPR.hero_legs) {
+    const pose = SPR.hero.ready && state.hurtTimer > 0
+      ? (SPR.hero.hurt || SPR.hero.swim)
+      : SPR.hero.ready && state.shoutPulse > 0
+        ? (SPR.hero.shout || SPR.hero.swim)
+        : SPR.hero.ready && p.vy > 4.2
+          ? (SPR.hero.dive || SPR.hero.swim)
+          : null;
+
+    if (blinking) {
+      // Keep the invulnerability blink, while the damage halo below remains visible.
+    } else if (pose && pose !== SPR.hero.swim) {
+      ctx.drawImage(pose, -pose.width / 2, -pose.height / 2);
+    } else if (SPR.hero.ready && SPR.hero.swimFrames) {
+      const frameIndex = Math.floor(state.t / 6) % SPR.hero.swimFrames.length;
+      const frame = SPR.hero.swimFrames[frameIndex];
       // Leg 2 (back leg, shaded slightly darker)
       ctx.save();
       ctx.translate(-49.5, 7);
       ctx.rotate(Math.sin(state.t * 0.3) * 0.24);
-      ctx.drawImage(SPR.hero_legs, -35, -43);
+      ctx.drawImage(frame.legs, -35, -43);
       ctx.fillStyle = "rgba(0, 0, 0, 0.22)"; // slight depth shade
       ctx.globalCompositeOperation = "source-atop";
       ctx.fillRect(-35, -43, 35, 72);
@@ -1700,11 +1720,11 @@
       ctx.save();
       ctx.translate(-49.5, 7);
       ctx.rotate(-Math.sin(state.t * 0.3) * 0.24);
-      ctx.drawImage(SPR.hero_legs, -35, -43);
+      ctx.drawImage(frame.legs, -35, -43);
       ctx.restore();
 
       // Body (torso, head, arms, tank)
-      ctx.drawImage(SPR.hero_body, -49.5, -36);
+      ctx.drawImage(frame.body, -49.5, -36);
     } else if (SPR.hero.ready && SPR.hero.swim) {
       const img = SPR.hero.swim;
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
