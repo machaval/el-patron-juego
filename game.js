@@ -398,18 +398,48 @@
     g.fillText(c.name, 18 - tw / 2, 21);
   }));
 
-  SPR.flag = makeCanvas(40, 48, (g) => {
-    pxBox(g, 6, 4, 4, 44, "#ddd");
-    g.fillStyle = "#0d6b4a";
-    g.beginPath();
-    g.moveTo(10, 6);
-    g.lineTo(38, 16);
-    g.lineTo(10, 26);
-    g.fill();
-    g.fillStyle = "#f2a900";
-    g.font = "bold 8px sans-serif";
-    g.fillText("SAP", 12, 18);
-  });
+  const GATE_DESIGNS = [
+    { lines: ["ANYPOINT", "STUDIO"], accent: "#00a1e0", glow: "#7fd7ff", deep: "#123b55" },
+    { lines: ["DATAWEAVE", "CHASM"], accent: "#58c9ca", glow: "#b4f1d4", deep: "#174450" },
+    { lines: ["API", "PLATFORM"], accent: "#7fd7ff", glow: "#d4f5ff", deep: "#16435a" },
+    { lines: ["MULE 4", "ABYSS"], accent: "#82b8ce", glow: "#d0e9ec", deep: "#263f4a" },
+    { lines: ["IPO", "CONTROL PLANE"], accent: "#a688d2", glow: "#efd779", deep: "#332749" },
+    { lines: ["FINAL", "CASH OUT"], accent: "#d4a017", glow: "#fff0ae", deep: "#4a3520" }
+  ];
+
+  SPR.gates = GATE_DESIGNS.map((design) => makeCanvas(144, 176, (g) => {
+    pxBox(g, 7, 2, 130, 169, "#06131c");
+    pxBox(g, 13, 7, 118, 158, "#c28b2d");
+    pxBox(g, 18, 11, 108, 148, design.accent);
+    pxBox(g, 25, 18, 94, 134, "#132d37");
+    pxBox(g, 32, 27, 80, 115, design.deep);
+    pxBox(g, 39, 37, 66, 99, "#071821");
+    pxBox(g, 45, 44, 54, 88, design.deep);
+    pxBox(g, 20, 15, 7, 132, design.glow);
+    pxBox(g, 117, 15, 7, 132, "#263d43");
+    pxBox(g, 11, 10, 122, 8, "#fff0ae");
+    pxBox(g, 11, 151, 122, 11, "#d09d3e");
+    pxBox(g, 28, 22, 88, 30, "#071821");
+    pxBox(g, 31, 25, 82, 2, design.glow);
+    pxBox(g, 31, 47, 82, 2, design.accent);
+    g.fillStyle = design.glow;
+    g.font = "bold 9px monospace";
+    g.textAlign = "center";
+    g.fillText(design.lines[0], 72, 36);
+    g.fillStyle = "#f1dfa0";
+    g.font = "bold 8px monospace";
+    g.fillText(design.lines[1], 72, 44);
+    g.textAlign = "left";
+    for (let step = 0; step < 4; step++) {
+      const inset = step * 6;
+      const y = 69 + step * 10;
+      pxBox(g, 69 - inset, y, 6 + inset * 2, 3, step % 2 ? design.accent : design.glow);
+    }
+    pxBox(g, 3, 58, 10, 7, design.glow);
+    pxBox(g, 131, 96, 10, 7, design.glow);
+    pxBox(g, 55, 130, 34, 7, design.accent);
+    pxBox(g, 61, 137, 22, 5, design.glow);
+  }));
 
   SPR.bubble = makeCanvas(8, 8, (g) => {
     disc(g, 4, 4, 3, "rgba(180,230,255,0.5)");
@@ -874,9 +904,11 @@
 
     state.ents.push({
       type: "goal",
-      x: L.length - 120,
-      y: H / 2 - 40,
-      w: 40, h: 80, alive: true
+      x: L.length - 175,
+      y: H / 2 - 88,
+      w: 144, h: 176,
+      destination: Math.min(state.level + 1, GATE_DESIGNS.length - 1),
+      alive: true
     });
 
     banner(L.name);
@@ -1451,10 +1483,7 @@
     } else if (e.type === "rocket" && e.alive) {
       ctx.drawImage(SPR.rocket, e.x, e.y);
     } else if (e.type === "goal" && e.alive) {
-      ctx.drawImage(SPR.flag, e.x, e.y);
-      ctx.fillStyle = "#f0d060";
-      ctx.font = "10px 'Press Start 2P', monospace";
-      ctx.fillText("END", e.x - 4, e.y - 6);
+      ctx.drawImage(SPR.gates[e.destination], e.x, e.y, e.w, e.h);
     }
   }
 
