@@ -425,6 +425,52 @@
     disc(g, 3, 3, 1, "#fff");
   });
 
+  const FISH_PALETTES = [
+    { body: "#4e8992", light: "#8dc1bc", fin: "#326573" },
+    { body: "#718a76", light: "#bdc88e", fin: "#48665c" },
+    { body: "#536f98", light: "#91b6c7", fin: "#354d75" }
+  ];
+
+  function drawPixelFish(g, kind, frame) {
+    const palette = FISH_PALETTES[kind];
+    g.imageSmoothingEnabled = false;
+    if (kind === 0) {
+      pxBox(g, 2, frame ? 2 : 4, 4, 3, "#07141c");
+      pxBox(g, 3, frame ? 3 : 5, 2, 1, palette.fin);
+      pxBox(g, 6, 3, 13, 1, "#07141c");
+      pxBox(g, 5, 4, 16, 4, "#07141c");
+      pxBox(g, 7, 5, 12, 2, palette.body);
+      pxBox(g, 9, 5, 8, 1, palette.light);
+      pxBox(g, 11, 8, 5, 2, "#07141c");
+      pxBox(g, 12, 8, 3, 1, palette.fin);
+    } else if (kind === 1) {
+      pxBox(g, 2, frame ? 3 : 4, 4, 3, "#07141c");
+      pxBox(g, 3, frame ? 4 : 5, 2, 1, palette.fin);
+      pxBox(g, 6, 2, 11, 1, "#07141c");
+      pxBox(g, 5, 3, 14, 6, "#07141c");
+      pxBox(g, 7, 4, 10, 4, palette.body);
+      pxBox(g, 9, 4, 6, 1, palette.light);
+      pxBox(g, 10, 9, 5, 2, "#07141c");
+      pxBox(g, 11, 9, 3, 1, palette.fin);
+    } else {
+      pxBox(g, 1, frame ? 2 : 4, 5, 3, "#07141c");
+      pxBox(g, 2, frame ? 3 : 5, 3, 1, palette.fin);
+      pxBox(g, 6, 4, 15, 1, "#07141c");
+      pxBox(g, 5, 5, 17, 3, "#07141c");
+      pxBox(g, 7, 6, 13, 1, palette.body);
+      pxBox(g, 10, 5, 8, 1, palette.light);
+      pxBox(g, 13, 8, 5, 2, "#07141c");
+      pxBox(g, 14, 8, 3, 1, palette.fin);
+    }
+    pxBox(g, kind === 1 ? 16 : 18, kind === 1 ? 4 : 5, 1, 1, "#eaf7f4");
+    pxBox(g, kind === 1 ? 17 : 19, kind === 1 ? 4 : 5, 1, 1, "#07141c");
+  }
+
+  SPR.fish = FISH_PALETTES.map((_, kind) => [
+    makeCanvas(24, 12, (g) => drawPixelFish(g, kind, 0)),
+    makeCanvas(24, 12, (g) => drawPixelFish(g, kind, 1))
+  ]);
+
   const LEVELS = [
     {
       name: "SAP TERRITORY",
@@ -1161,6 +1207,33 @@
       ctx.lineTo(x + 110, H);
       ctx.lineTo(x + 20, H);
       ctx.fill();
+    }
+    ctx.restore();
+
+    const fishTrack = W + 220;
+    const fishParallax = state.dist * 0.18;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (let school = 0; school < 8; school++) {
+      const wrappedX = ((school * 171 + 42 - fishParallax) % fishTrack + fishTrack) % fishTrack;
+      const schoolX = wrappedX - 110;
+      const schoolY = 82 + (school * 71) % 330;
+      const kind = school % FISH_PALETTES.length;
+      const count = 2 + school % 3;
+      const size = 0.72 + (school % 2) * 0.12;
+      ctx.globalAlpha = 0.22 + (school % 2) * 0.04;
+      for (let fish = 0; fish < count; fish++) {
+        const sprite = SPR.fish[kind][reducedMotion ? 0 : (Math.floor(state.t / 8) + fish + school) % 2];
+        const fishW = sprite.width * size;
+        const fishH = sprite.height * size;
+        const fishX = schoolX + fish * (fishW * 0.72);
+        const swim = reducedMotion ? 0 : Math.sin(state.t * 0.055 + school + fish) * 2;
+        ctx.save();
+        ctx.translate(fishX + fishW / 2, schoolY + swim + fishH / 2);
+        if (school % 2) ctx.scale(-1, 1);
+        ctx.drawImage(sprite, -fishW / 2, -fishH / 2, fishW, fishH);
+        ctx.restore();
+      }
     }
     ctx.restore();
 
