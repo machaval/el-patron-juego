@@ -1489,6 +1489,21 @@
     ctx.globalAlpha = 1;
   }
 
+  function drawSapPlaque(x, y) {
+    ctx.save();
+    ctx.fillStyle = "#071923";
+    ctx.fillRect(x, y, 40, 24);
+    ctx.strokeStyle = "#f4c866";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, 38, 22);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("SAP", x + 20, y + 12);
+    ctx.restore();
+  }
+
   function drawEntity(e) {
     if (e.type === "cannon" && e.alive) {
       const bodyY = e.side === "top" ? 0 : e.y + 40;
@@ -1511,17 +1526,6 @@
         ctx.fillStyle = "#0a2933";
         ctx.fillRect(e.x + 20, y + 16, 9, 3);
       }
-      ctx.font = "bold 7px monospace";
-      ctx.textAlign = "center";
-      for (let y = bodyY + 22; y + 12 < bodyY + bodyH; y += 92) {
-        ctx.fillStyle = "#08272f";
-        ctx.fillRect(e.x + 16, y, 25, 12);
-        ctx.fillStyle = "#c4e6c5";
-        ctx.fillText("SAP", e.x + 28.5, y + 9);
-        ctx.fillStyle = "#e3b34f";
-        ctx.fillRect(e.x + 15, y + 2, 2, 8);
-      }
-      ctx.textAlign = "left";
       if (e.side === "top") {
         ctx.drawImage(SPR.cannonL, e.x, e.h - 52);
         if (e.fireWarn > 0) {
@@ -1543,6 +1547,11 @@
         }
       } else {
         ctx.drawImage(SPR.cannonL, e.x, e.y);
+      }
+      const plaqueStart = e.side === "top" ? 8 : e.y + 68;
+      const plaqueEnd = e.side === "top" ? e.h - 52 : H - 8;
+      for (let y = plaqueStart; y + 24 <= plaqueEnd; y += 76) {
+        drawSapPlaque(e.x + 6, y);
       }
     } else if (e.type === "shark" && e.alive) {
       ctx.save();
