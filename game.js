@@ -931,7 +931,7 @@
       x: L.length - 175,
       y: H / 2 - 88,
       w: 144, h: 176,
-      destination: Math.min(state.level + 1, GATE_DESIGNS.length - 1),
+      destination: state.level,
       alive: true
     });
 
