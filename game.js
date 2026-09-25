@@ -1191,6 +1191,7 @@
     }
     ctx.restore();
 
+    // Decorative fish stay in the background and never enter entity or collision state.
     const fishTrack = W + 220;
     const fishParallax = state.dist * 0.18;
     ctx.save();
