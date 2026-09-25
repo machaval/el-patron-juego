@@ -19,15 +19,20 @@
 
   const KEY = {};
   let showHitboxes = false;
+  const DEV = {
+    enabled: new URLSearchParams(window.location.search).get("dev") === "1",
+    panelOpen: false,
+    godMode: false
+  };
   addEventListener("keydown", (e) => {
-    if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR", "KeyH"].includes(e.code)) return;
+    if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) return;
     if (e.code === "KeyX" && state.mode === "title") {
       e.preventDefault();
       resetSavedProgress();
       return;
     }
     KEY[e.code] = true;
-    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH"].includes(e.code)) e.preventDefault();
+    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
   canvas.addEventListener("pointerdown", () => { KEY.Pointer = true; });
@@ -756,7 +761,8 @@
     bannerLife: 0,
     winTimer: 0,
     checkpoint: 0,
-    runSeed: 0
+    runSeed: 0,
+    devRun: false
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -993,6 +999,10 @@
   }
 
   function damage() {
+    if (state.devRun && DEV.enabled && DEV.godMode) {
+      state.health = state.maxHealth;
+      return;
+    }
     if (state.invuln > 0) return;
     state.health--;
     state.invuln = 70;
@@ -1004,7 +1014,7 @@
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
     if (state.health <= 0) {
       state.mode = "dead";
-      persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+      if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
     }
   }
 
@@ -1014,10 +1024,12 @@
     const completionBonus = 200 + state.score + state.linked * 80 + state.health * 50;
     state.transitionReward = state.distanceVested + completionBonus;
     state.vested += completionBonus;
-    persistSavedProgress({
-      bestVested: Math.max(savedProgress.bestVested, state.vested),
-      highestUnlockedLevel: Math.max(savedProgress.highestUnlockedLevel, Math.min(state.level + 1, LEVELS.length - 1))
-    });
+    if (!state.devRun) {
+      persistSavedProgress({
+        bestVested: Math.max(savedProgress.bestVested, state.vested),
+        highestUnlockedLevel: Math.max(savedProgress.highestUnlockedLevel, Math.min(state.level + 1, LEVELS.length - 1))
+      });
+    }
     state.score = 0;
     audio.win();
     if (state.level >= LEVELS.length - 1) {
@@ -1028,11 +1040,13 @@
     state.mode = "level-transition";
   }
 
-  function startGame(fromCheckpoint, checkpointLevel, runSeed) {
+  function startGame(fromCheckpoint, checkpointLevel, runSeed, options = {}) {
     const retryingAfterDeath = state.mode === "dead";
     audio.ensure();
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
+    state.devRun = Boolean(options.devRun);
+    if (!state.devRun) DEV.godMode = false;
     state.score = 0;
     state.health = state.maxHealth;
     if (!fromCheckpoint) {
@@ -1044,11 +1058,45 @@
       state.checkpoint = state.level;
       if (retryingAfterDeath) state.vested = state.levelStartVested;
     }
+    if (options.startLevel !== undefined) {
+      state.level = Math.max(0, Math.min(LEVELS.length - 1, options.startLevel));
+      state.checkpoint = state.level;
+    }
     spawnLevel();
     updateControlLabels();
   }
 
   function update() {
+    if (DEV.enabled && KEY.F2) {
+      DEV.panelOpen = !DEV.panelOpen;
+      KEY.F2 = false;
+    }
+    if (DEV.enabled && DEV.panelOpen) {
+      if (KEY.Escape) {
+        KEY.Escape = false;
+        DEV.panelOpen = false;
+        return;
+      }
+      if (KEY.KeyG) {
+        KEY.KeyG = false;
+        DEV.godMode = !DEV.godMode;
+        if (DEV.godMode) {
+          state.health = state.maxHealth;
+          if (state.mode !== "title") state.devRun = true;
+        }
+      }
+      for (let level = 0; level < LEVELS.length; level++) {
+        const key = "Digit" + (level + 1);
+        if (!KEY[key]) continue;
+        KEY[key] = false;
+        KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+        DEV.panelOpen = false;
+        startGame(false, undefined, createRunSeed(), { devRun: true, startLevel: level });
+        return;
+      }
+      return;
+    }
+
     if (KEY.KeyM) {
       audio.muted = !audio.muted;
       KEY.KeyM = false;
@@ -1083,7 +1131,8 @@
     if (state.mode === "dead" || state.mode === "win") {
       if (KEY.Enter || KEY.Space || KEY.Pointer) {
         KEY.Enter = KEY.Space = KEY.Pointer = false;
-        startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint, state.runSeed);
+        if (state.devRun) startGame(false, undefined, state.runSeed, { devRun: true, startLevel: state.level });
+        else startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint, state.runSeed);
       }
       return;
     }
@@ -1585,6 +1634,11 @@
       ctx.drawImage(SPR.lifeIcon, livesStartX + i * lifeIconGap, 7, lifeIconSize, lifeIconSize);
       ctx.restore();
     }
+    if (state.devRun) {
+      ctx.fillStyle = "#ffd86b";
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.fillText(DEV.godMode ? "DEV · GOD" : "DEV RUN", 10, 50);
+    }
 
     if (L.connectors) {
       ctx.fillStyle = "#7fd7ff";
@@ -1756,6 +1810,41 @@
     ctx.textAlign = "left";
   }
 
+  function drawDeveloperPanel() {
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 8, 14, 0.78)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#0b2634";
+    ctx.fillRect(190, 126, 580, 288);
+    ctx.strokeStyle = "#7fd7ff";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(191.5, 127.5, 577, 285);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f0d060";
+    ctx.font = "12px 'Press Start 2P', monospace";
+    ctx.fillText("DEVELOPER TOOLS", W / 2, 164);
+    ctx.fillStyle = "#cde8f5";
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("Press 1–6 to start at a level", W / 2, 198);
+    for (let i = 0; i < LEVELS.length; i++) {
+      const col = i < 3 ? 0 : 1;
+      const row = i % 3;
+      const x = 258 + col * 270;
+      const y = 238 + row * 30;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#7fd7ff";
+      ctx.font = "bold 20px 'VT323', monospace";
+      ctx.fillText((i + 1) + ". " + LEVELS[i].name, x, y);
+    }
+    ctx.textAlign = "center";
+    ctx.fillStyle = DEV.godMode ? "#71dfaa" : "#cde8f5";
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("G: GOD MODE " + (DEV.godMode ? "ON · UNLIMITED LIVES" : "OFF"), W / 2, 348);
+    ctx.fillStyle = "#9dc2d0";
+    ctx.fillText("F2 or ESC: close developer tools", W / 2, 385);
+    ctx.restore();
+  }
+
   function drawTitle() {
     drawBg();
     ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -1781,6 +1870,10 @@
     ctx.fillStyle = "#7fb4c8";
     ctx.font = "20px 'VT323', monospace";
     ctx.fillText("BEST VESTED: $" + savedProgress.bestVested + "   ·   X: RESET SAVED DATA", W / 2, 454);
+    if (DEV.enabled) {
+      ctx.fillStyle = "#71dfaa";
+      ctx.fillText("DEV MODE: F2 FOR LEVEL SELECT + GOD MODE", W / 2, 482);
+    }
     ctx.textAlign = "left";
   }
 
@@ -1836,6 +1929,7 @@
       drawPlay();
       if (state.mode === "paused") drawPauseOverlay();
     }
+    if (DEV.enabled && DEV.panelOpen) drawDeveloperPanel();
     requestAnimationFrame(frame);
   }
 
