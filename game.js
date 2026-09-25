@@ -403,9 +403,9 @@
   });
 
   const FISH_PALETTES = [
-    { body: "#4e8992", light: "#8dc1bc", fin: "#326573" },
-    { body: "#718a76", light: "#bdc88e", fin: "#48665c" },
-    { body: "#536f98", light: "#91b6c7", fin: "#354d75" }
+    { body: "#78b9bd", light: "#c5efea", fin: "#4d929b" },
+    { body: "#afc693", light: "#e6efb8", fin: "#75946d" },
+    { body: "#8eaed6", light: "#d2e6f3", fin: "#5d7fae" }
   ];
 
   function drawPixelFish(g, kind, frame) {
@@ -415,8 +415,8 @@
       pxBox(g, 2, frame ? 2 : 4, 4, 3, "#07141c");
       pxBox(g, 3, frame ? 3 : 5, 2, 1, palette.fin);
       pxBox(g, 6, 3, 13, 1, "#07141c");
-      pxBox(g, 5, 4, 16, 4, "#07141c");
-      pxBox(g, 7, 5, 12, 2, palette.body);
+      pxBox(g, 5, 4, 16, 5, "#07141c");
+      pxBox(g, 7, 5, 12, 3, palette.body);
       pxBox(g, 9, 5, 8, 1, palette.light);
       pxBox(g, 11, 8, 5, 2, "#07141c");
       pxBox(g, 12, 8, 3, 1, palette.fin);
@@ -433,8 +433,8 @@
       pxBox(g, 1, frame ? 2 : 4, 5, 3, "#07141c");
       pxBox(g, 2, frame ? 3 : 5, 3, 1, palette.fin);
       pxBox(g, 6, 4, 15, 1, "#07141c");
-      pxBox(g, 5, 5, 17, 3, "#07141c");
-      pxBox(g, 7, 6, 13, 1, palette.body);
+      pxBox(g, 5, 4, 17, 5, "#07141c");
+      pxBox(g, 7, 5, 13, 3, palette.body);
       pxBox(g, 10, 5, 8, 1, palette.light);
       pxBox(g, 13, 8, 5, 2, "#07141c");
       pxBox(g, 14, 8, 3, 1, palette.fin);
@@ -1231,14 +1231,14 @@
     const fishParallax = state.dist * 0.18;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    for (let school = 0; school < 6; school++) {
+    for (let school = 0; school < 5; school++) {
       const wrappedX = ((school * 217 + 42 - fishParallax) % fishTrack + fishTrack) % fishTrack;
       const schoolX = wrappedX - 110;
       const schoolY = 82 + (school * 71) % 330;
       const kind = school % FISH_PALETTES.length;
       const count = 2 + school % 2;
-      const size = 0.44 + (school % 2) * 0.1;
-      ctx.globalAlpha = 0.24 + (school % 2) * 0.05;
+      const size = 0.75 + (school % 2) * 0.1;
+      ctx.globalAlpha = 0.72 + (school % 2) * 0.04;
       for (let fish = 0; fish < count; fish++) {
         const sprite = SPR.fish[kind][reducedMotion ? 0 : (Math.floor(state.t / 8) + fish + school) % 2];
         const fishW = sprite.width * size;
