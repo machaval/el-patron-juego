@@ -154,7 +154,20 @@
     g.fill();
   }
 
-  const SPR = { hero: { ready: false }, side: {} };
+  const SPR = { hero: { ready: false }, side: {}, hero_body: null, hero_legs: null };
+
+  function sliceHero() {
+    if (!SPR.hero.swim) return;
+    const swimImg = SPR.hero.swim;
+    // Leg slice (width 35, height 72)
+    SPR.hero_legs = makeCanvas(35, 72, (g) => {
+      g.drawImage(swimImg, 0, 0, 35, 72, 0, 0, 35, 72);
+    });
+    // Body slice (width 99, height 72)
+    SPR.hero_body = makeCanvas(99, 72, (g) => {
+      g.drawImage(swimImg, 35, 0, 99, 72, 0, 0, 99, 72);
+    });
+  }
 
   function loadHero() {
     const names = ["idle", "swim", "swim_2", "swim_3", "shout", "dive", "hurt", "thumbs", "ray"];
@@ -166,7 +179,11 @@
       left--;
       if (left === 0) {
         SPR.hero.ready = Boolean(SPR.hero.swim);
-        if (!SPR.hero.ready) console.warn("Hero swim sprite failed to load; using the fallback shape.");
+        if (SPR.hero.ready) {
+          sliceHero();
+        } else {
+          console.warn("Hero swim sprite failed to load; using the fallback shape.");
+        }
       }
     }
     names.forEach((n) => {
@@ -482,7 +499,7 @@
       bugs: false,
       connectors: 6,
       squad: 1,
-      killN: 1,
+      killN: 2,
       shouts: 3
     },
     {
@@ -1363,23 +1380,54 @@
   function drawHero() {
     const p = state.player;
     if (state.invuln > 0 && state.t % 6 < 2) return;
-    const swimCycle = [SPR.hero.swim, SPR.hero.swim_3, SPR.hero.swim_2, SPR.hero.swim_3];
-    let img = null;
-    if (SPR.hero.ready) {
-      if (state.hurtTimer > 0) img = SPR.hero.hurt || SPR.hero.swim;
-      else if (state.shoutPulse > 0) img = SPR.hero.shout || SPR.hero.swim;
-      else if (p.vy > 4.2) img = SPR.hero.dive || SPR.hero.swim;
-      else img = swimCycle[Math.floor(state.t / 6) % swimCycle.length] || SPR.hero.swim;
-    }
+    
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     const tilt = Math.max(-0.35, Math.min(0.4, p.vy * 0.045));
     ctx.rotate(tilt);
-    if (img) ctx.drawImage(img, -img.width / 2, -img.height / 2);
-    else {
+    
+    if (SPR.hero.ready && SPR.hero_body && SPR.hero_legs) {
+      // Leg 2 (back leg, shaded slightly darker)
+      ctx.save();
+      ctx.translate(-14.5, 7);
+      ctx.rotate(Math.sin(state.t * 0.3) * 0.24);
+      ctx.drawImage(SPR.hero_legs, -35, -43);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.22)"; // slight depth shade
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillRect(-35, -43, 35, 72);
+      ctx.restore();
+
+      // Leg 1 (front leg)
+      ctx.save();
+      ctx.translate(-14.5, 7);
+      ctx.rotate(-Math.sin(state.t * 0.3) * 0.24);
+      ctx.drawImage(SPR.hero_legs, -35, -43);
+      ctx.restore();
+
+      // Body (torso, head, arms, tank)
+      ctx.drawImage(SPR.hero_body, -49.5, -36);
+    } else if (SPR.hero.ready && SPR.hero.swim) {
+      const img = SPR.hero.swim;
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    } else {
       ctx.fillStyle = "#143848";
       ctx.fillRect(-24, -12, 48, 24);
     }
+
+    // Hurt indicator: red glow / flashing aura around him
+    if (state.invuln > 0) {
+      ctx.strokeStyle = "rgba(255, 64, 64, " + (state.invuln / 70) + ")";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 44, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 0, 0, 0.12)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 44, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
     ctx.restore();
   }
 
