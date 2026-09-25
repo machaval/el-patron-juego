@@ -979,7 +979,7 @@
     const px = state.player.x + state.player.w / 2;
     const py = state.player.y + state.player.h / 2;
     const foes = state.ents.filter((e) => {
-      if (!e.alive) return false;
+      if (!e.alive || e.x + e.w <= 0 || e.x >= W) return false;
       if (state.level === 1) return e.type === "shark";
       return e.type === "bug" || e.type === "cannon" || e.type === "bolt" || e.type === "shark";
     });
@@ -989,6 +989,30 @@
       return da - db;
     });
     const n = Math.min(L.killN, foes.length);
+    if (!n) {
+      const fan = [
+        { vx: 4.6, vy: -2.1 },
+        { vx: 5.1, vy: 0 },
+        { vx: 4.6, vy: 2.1 }
+      ];
+      for (let i = 0; i < fan.length; i++) {
+        const shooterIndex = Math.round(i * (state.squad.length - 1) / (fan.length - 1));
+        const shooter = state.squad[shooterIndex];
+        state.ents.push({
+          type: "rocket",
+          x: shooter.x + 30,
+          y: shooter.y + 20,
+          w: 22,
+          h: 10,
+          vx: fan[i].vx,
+          vy: fan[i].vy,
+          freeFlight: true,
+          life: 180,
+          alive: true
+        });
+      }
+      return;
+    }
     for (let i = 0; i < n; i++) {
       const e = foes[i];
       e.alive = false;
@@ -996,12 +1020,16 @@
       state.score += points;
       addScoreEffect(e.x + 8, e.y + 4, "+" + points, "#ffd86b");
       burst(e.x + 8, e.y + 4, "#ff8040", 12);
+      const shooter = state.squad[i % state.squad.length];
       state.ents.push({
         type: "rocket",
-        x: state.player.x + 20,
-        y: state.player.y + 10,
+        x: shooter.x + 30,
+        y: shooter.y + 20,
+        w: 22,
+        h: 10,
         tx: e.x + 8,
         ty: e.y + 4,
+        freeFlight: false,
         life: 18,
         alive: true
       });
@@ -1289,8 +1317,9 @@
       if (e.type === "bolt" && e.alive) {
         e.x += e.vx;
         e.y += e.vy;
+        e.renderVx = e.vx - scroll;
         if (aabb(hitbox, e)) { e.alive = false; damage(); }
-        if (e.x < -20 || e.y > H) e.alive = false;
+        if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
       }
 
       if (e.type === "connector" && !e.linked && !e.missed && aabb(connectorPickup, e)) {
@@ -1323,8 +1352,16 @@
 
       if (e.type === "rocket") {
         e.life--;
-        e.x += (e.tx - e.x) * 0.25;
-        e.y += (e.ty - e.y) * 0.25;
+        e.prevX = e.x;
+        e.prevY = e.y;
+        if (e.freeFlight) {
+          e.x += e.vx;
+          e.y += e.vy;
+          if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
+        } else {
+          e.x += (e.tx - e.x) * 0.25;
+          e.y += (e.ty - e.y) * 0.25;
+        }
         if (e.life <= 0) e.alive = false;
       }
 
@@ -1556,13 +1593,23 @@
       ctx.restore();
     } else if (e.type === "bolt" && e.alive) {
       ctx.save();
+      const angle = Math.atan2(e.vy, e.renderVx ?? e.vx);
+      ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+      ctx.rotate(angle);
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = "#f2a900";
-      ctx.fillRect(e.x + 12, e.y + 3, 6, 2);
+      ctx.fillRect(-e.w / 2 - 6, -1, 6, 2);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(SPR.bolt, -e.w / 2, -e.h / 2, e.w, e.h);
       ctx.restore();
-      ctx.drawImage(SPR.bolt, e.x, e.y, e.w, e.h);
     } else if (e.type === "rocket" && e.alive) {
-      ctx.drawImage(SPR.rocket, e.x, e.y);
+      const dx = e.freeFlight ? e.vx : e.x - (e.prevX ?? e.x);
+      const dy = e.freeFlight ? e.vy : e.y - (e.prevY ?? e.y);
+      ctx.save();
+      ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.drawImage(SPR.rocket, -e.w / 2, -e.h / 2, e.w, e.h);
+      ctx.restore();
     } else if (e.type === "goal" && e.alive) {
       ctx.drawImage(SPR.gates[e.destination], e.x, e.y, e.w, e.h);
     }
