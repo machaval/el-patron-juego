@@ -34,6 +34,7 @@ html, body {
 
 #controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -89,8 +90,8 @@ html, body {
 @media (max-width: 600px) {
   html, body { justify-content: flex-start; }
   #frame { width: 100vw; margin-top: 12px; }
-  #controls { width: 100%; gap: 6px; margin-top: 10px; }
-  #controls button { flex: 1; padding: 6px 4px; font-size: 18px; }
+  #controls { width: 100%; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  #controls button { flex: 1 1 21%; padding: 6px 4px; font-size: 18px; }
   #hint { max-width: 96vw; margin-top: 8px; font-size: 18px; text-align: center; }
 }
 

@@ -7,25 +7,26 @@
 
   const W = canvas.width;
   const H = canvas.height;
-  const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  let reducedMotion = Boolean(motionPreference?.matches);
-  if (motionPreference?.addEventListener) {
-    motionPreference.addEventListener("change", (e) => { reducedMotion = e.matches; });
-  } else if (motionPreference?.addListener) {
-    motionPreference.addListener((e) => { reducedMotion = e.matches; });
-  }
   const buttons = {
     flap: document.getElementById("flap-button"),
     shout: document.getElementById("shout-button"),
     pause: document.getElementById("pause-button"),
-    mute: document.getElementById("mute-button")
+    mute: document.getElementById("mute-button"),
+    effects: document.getElementById("effects-button"),
+    continue: document.getElementById("continue-button"),
+    reset: document.getElementById("reset-button")
   };
 
   const KEY = {};
   addEventListener("keydown", (e) => {
-    if (e.repeat && ["KeyP", "Escape", "KeyM"].includes(e.code)) return;
+    if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR"].includes(e.code)) return;
+    if (e.code === "KeyX" && state.mode === "title") {
+      e.preventDefault();
+      resetSavedProgress();
+      return;
+    }
     KEY[e.code] = true;
-    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM"].includes(e.code)) e.preventDefault();
+    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
   canvas.addEventListener("pointerdown", () => { KEY.Pointer = true; });
@@ -43,16 +44,35 @@
   bindPressButton(buttons.shout, "KeyT");
   bindPressButton(buttons.pause, "KeyP");
   bindPressButton(buttons.mute, "KeyM");
+  bindPressButton(buttons.effects, "KeyR");
+  bindPressButton(buttons.continue, "KeyC");
+  if (buttons.reset) buttons.reset.addEventListener("click", resetSavedProgress);
 
   function updateControlLabels() {
+    if (buttons.flap) {
+      buttons.flap.textContent = state.mode === "title" ? "START" : "FLAP";
+      buttons.flap.setAttribute("aria-label", state.mode === "title" ? "Start a new run" : "Flap");
+    }
     if (buttons.pause) {
+      buttons.pause.hidden = state.mode === "title";
       buttons.pause.textContent = state.mode === "paused" ? "RESUME" : "PAUSE";
       buttons.pause.setAttribute("aria-label", state.mode === "paused" ? "Resume game" : "Pause game");
     }
+    if (buttons.shout) buttons.shout.hidden = state.mode === "title";
     if (buttons.mute) {
       buttons.mute.textContent = audio.muted ? "UNMUTE" : "MUTE";
       buttons.mute.setAttribute("aria-label", audio.muted ? "Unmute sound" : "Mute sound");
     }
+    if (buttons.effects) {
+      buttons.effects.textContent = reducedMotion ? "FULL FX" : "LESS FX";
+      buttons.effects.setAttribute("aria-label", reducedMotion ? "Enable full visual effects" : "Reduce visual effects");
+    }
+    if (buttons.continue) {
+      buttons.continue.textContent = "CONTINUE L" + (savedProgress.highestUnlockedLevel + 1);
+      buttons.continue.hidden = state.mode !== "title" || savedProgress.highestUnlockedLevel === 0;
+    }
+    if (buttons.reset) buttons.reset.hidden = state.mode !== "title";
+    document.getElementById("controls")?.classList.toggle("title-mode", state.mode === "title");
   }
 
   const audio = {
@@ -467,6 +487,83 @@
     }
   ];
 
+  const SAVE_KEY = "el-patron-save-v1";
+  const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+
+  function defaultSavedProgress() {
+    return { version: 1, bestVested: 0, highestUnlockedLevel: 0, muted: false, reducedEffects: null };
+  }
+
+  function readSavedProgress() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return defaultSavedProgress();
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.version !== 1) return defaultSavedProgress();
+      return {
+        version: 1,
+        bestVested: Number.isFinite(parsed.bestVested) ? Math.max(0, Math.floor(parsed.bestVested)) : 0,
+        highestUnlockedLevel: Number.isFinite(parsed.highestUnlockedLevel)
+          ? Math.max(0, Math.min(LEVELS.length - 1, Math.floor(parsed.highestUnlockedLevel)))
+          : 0,
+        muted: typeof parsed.muted === "boolean" ? parsed.muted : false,
+        reducedEffects: typeof parsed.reducedEffects === "boolean" ? parsed.reducedEffects : null
+      };
+    } catch (error) {
+      console.warn("Could not read saved progress; starting with defaults.", error);
+      return defaultSavedProgress();
+    }
+  }
+
+  let savedProgress = readSavedProgress();
+  let reducedMotion = savedProgress.reducedEffects ?? Boolean(motionPreference?.matches);
+
+  function persistSavedProgress(patch) {
+    savedProgress = { ...savedProgress, ...patch, version: 1 };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(savedProgress));
+    } catch (error) {
+      console.warn("Could not save progress; gameplay will continue without persistence.", error);
+    }
+  }
+
+  function resetSavedProgress() {
+    if (state.mode !== "title") return;
+    const confirmed = window.confirm("Reset the best score, unlocked levels, mute, and effects settings?");
+    if (!confirmed) return;
+    savedProgress = defaultSavedProgress();
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch (error) {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(savedProgress));
+      } catch (writeError) {
+        console.warn("Could not reset saved progress; storage is unavailable.", error, writeError);
+      }
+    }
+    state.checkpoint = 0;
+    state.vested = 0;
+    audio.muted = false;
+    reducedMotion = Boolean(motionPreference?.matches);
+    updateControlLabels();
+  }
+
+  if (motionPreference?.addEventListener) {
+    motionPreference.addEventListener("change", (e) => {
+      if (savedProgress.reducedEffects === null) {
+        reducedMotion = e.matches;
+        updateControlLabels();
+      }
+    });
+  } else if (motionPreference?.addListener) {
+    motionPreference.addListener((e) => {
+      if (savedProgress.reducedEffects === null) {
+        reducedMotion = e.matches;
+        updateControlLabels();
+      }
+    });
+  }
+
   const state = {
     mode: "title",
     level: 0,
@@ -500,6 +597,9 @@
     winTimer: 0,
     checkpoint: 0
   };
+
+  state.checkpoint = savedProgress.highestUnlockedLevel;
+  audio.muted = savedProgress.muted;
 
   function banner(text) {
     state.banner = text;
@@ -707,6 +807,10 @@
     const gained = 200 + state.score + state.linked * 80 + state.health * 50;
     state.transitionReward = gained;
     state.vested += gained;
+    persistSavedProgress({
+      bestVested: Math.max(savedProgress.bestVested, state.vested),
+      highestUnlockedLevel: Math.max(savedProgress.highestUnlockedLevel, Math.min(state.level + 1, LEVELS.length - 1))
+    });
     state.score = 0;
     audio.win();
     if (state.level >= LEVELS.length - 1) {
@@ -717,7 +821,7 @@
     state.mode = "level-transition";
   }
 
-  function startGame(fromCheckpoint) {
+  function startGame(fromCheckpoint, checkpointLevel) {
     audio.ensure();
     state.mode = "play";
     state.score = 0;
@@ -727,7 +831,8 @@
       state.vested = 0;
       state.checkpoint = 0;
     } else {
-      state.level = state.checkpoint || 0;
+      state.level = Math.max(0, Math.min(LEVELS.length - 1, checkpointLevel ?? state.checkpoint ?? 0));
+      state.checkpoint = state.level;
     }
     spawnLevel();
     updateControlLabels();
@@ -737,12 +842,26 @@
     if (KEY.KeyM) {
       audio.muted = !audio.muted;
       KEY.KeyM = false;
+      persistSavedProgress({ muted: audio.muted });
+      updateControlLabels();
+    }
+    if (KEY.KeyR) {
+      reducedMotion = !reducedMotion;
+      KEY.KeyR = false;
+      persistSavedProgress({ reducedEffects: reducedMotion });
       updateControlLabels();
     }
 
     if (state.mode === "title") {
-      if (KEY.Enter || KEY.Space || KEY.Pointer) {
+      if (KEY.KeyC) {
+        KEY.KeyC = false;
+        if (savedProgress.highestUnlockedLevel <= 0) return;
         KEY.Enter = KEY.Space = KEY.Pointer = false;
+        startGame(true, savedProgress.highestUnlockedLevel);
+        return;
+      }
+      if (KEY.Enter || KEY.Space || KEY.Pointer) {
+        KEY.Enter = KEY.Space = KEY.Pointer = KEY.KeyC = false;
         startGame(false);
       }
       return;
@@ -750,7 +869,7 @@
     if (state.mode === "dead" || state.mode === "win") {
       if (KEY.Enter || KEY.Space || KEY.Pointer) {
         KEY.Enter = KEY.Space = KEY.Pointer = false;
-        startGame(state.mode === "dead" && state.checkpoint > 0);
+        startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint);
       }
       return;
     }
@@ -1227,9 +1346,15 @@
     ctx.fillStyle = "#cde8f5";
     ctx.font = "26px 'VT323', monospace";
     ctx.fillText("Dodge SAP cannons and sharks. Link Anypoint connectors.", W / 2, 320);
-    ctx.fillText("SPACE flap   ·   T Trabajeen! (3 per level, from L2)", W / 2, 348);
+    ctx.fillText("SPACE flap   ·   T Trabajeen!   ·   P pause   ·   M mute   ·   R effects", W / 2, 348);
     ctx.fillStyle = "#f0d060";
-    ctx.fillText("PRESS ENTER / SPACE TO DIVE", W / 2, 400);
+    ctx.fillText("ENTER / SPACE: NEW RUN", W / 2, 390);
+    if (savedProgress.highestUnlockedLevel > 0) {
+      ctx.fillText("C: CONTINUE FROM L" + (savedProgress.highestUnlockedLevel + 1), W / 2, 420);
+    }
+    ctx.fillStyle = "#7fb4c8";
+    ctx.font = "20px 'VT323', monospace";
+    ctx.fillText("BEST VESTED: $" + savedProgress.bestVested + "   ·   X: RESET SAVED DATA", W / 2, 454);
     ctx.textAlign = "left";
   }
 
