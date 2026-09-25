@@ -219,14 +219,18 @@
   SPR.side.fire = makeCanvas(70, 46, (g) => drawSidekick(g, 2, true));
 
   function sapCannon(g) {
-    pxBox(g, 18, 8, 28, 48, "#0d6b4a");
-    pxBox(g, 22, 12, 20, 40, "#085c3e");
-    disc(g, 32, 32, 10, "#f2a900");
-    g.fillStyle = "#fff";
-    g.font = "bold 11px sans-serif";
-    g.fillText("SAP", 21, 36);
-    pxBox(g, 4, 26, 16, 10, "#333");
-    pxBox(g, 0, 28, 8, 6, "#666");
+    pxBox(g, 14, 4, 34, 56, "#082a2b");
+    pxBox(g, 18, 8, 26, 48, "#176756");
+    pxBox(g, 22, 10, 4, 44, "#3b9b78");
+    pxBox(g, 40, 10, 4, 44, "#0b423e");
+    pxBox(g, 16, 4, 30, 5, "#77bd91");
+    pxBox(g, 16, 54, 30, 5, "#07252d");
+    pxBox(g, 22, 22, 20, 20, "#092c36");
+    pxBox(g, 25, 25, 14, 14, "#f2a900");
+    pxBox(g, 28, 28, 8, 8, "#ffe2a0");
+    pxBox(g, 2, 25, 18, 14, "#071e29");
+    pxBox(g, 0, 28, 8, 8, "#78b8aa");
+    pxBox(g, 4, 30, 4, 4, "#fff0b0");
   }
   SPR.cannonL = makeCanvas(50, 64, sapCannon);
   SPR.cannonR = makeCanvas(50, 64, (g) => {
@@ -236,8 +240,10 @@
   });
 
   SPR.bolt = makeCanvas(18, 8, (g) => {
-    pxBox(g, 0, 2, 18, 4, "#f2a900");
-    pxBox(g, 12, 0, 6, 8, "#ffe08a");
+    pxBox(g, 0, 3, 5, 2, "#e68143");
+    pxBox(g, 4, 2, 7, 4, "#f2a900");
+    pxBox(g, 10, 1, 5, 6, "#ffe08a");
+    pxBox(g, 14, 2, 4, 4, "#fff5cb");
   });
 
   function drawShark(g, frame) {
@@ -375,11 +381,19 @@
   ];
 
   SPR.connectors = CONNECTORS.map((c) => makeCanvas(36, 36, (g) => {
-    disc(g, 18, 18, 16, "#0a2430");
-    disc(g, 18, 18, 14, c.bg);
-    disc(g, 13, 13, 4, "rgba(255,255,255,0.35)");
-    g.fillStyle = "#fff";
-    g.font = "bold 8px sans-serif";
+    pxBox(g, 9, 0, 18, 3, "#c4f3e7");
+    pxBox(g, 3, 3, 30, 4, "#163b46");
+    pxBox(g, 0, 9, 36, 18, "#163b46");
+    pxBox(g, 3, 29, 30, 4, "#163b46");
+    pxBox(g, 9, 33, 18, 3, "#c4f3e7");
+    pxBox(g, 4, 10, 28, 16, c.bg);
+    pxBox(g, 8, 5, 20, 4, c.bg);
+    pxBox(g, 8, 27, 20, 4, c.bg);
+    pxBox(g, 6, 11, 24, 3, "rgba(255,255,255,0.42)");
+    pxBox(g, 6, 24, 24, 2, "rgba(2,20,30,0.45)");
+    pxBox(g, 8, 15, 20, 9, "#092631");
+    g.fillStyle = "#eafff8";
+    g.font = "bold 8px monospace";
     const tw = g.measureText(c.name).width;
     g.fillText(c.name, 18 - tw / 2, 21);
   }));
@@ -711,12 +725,15 @@
 
   function burst(x, y, c, n) {
     for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+      const speed = 1.5 + Math.random() * 2.7;
       state.parts.push({
         x, y,
-        vx: (Math.random() - 0.5) * 6,
-        vy: (Math.random() - 0.5) * 6,
-        life: 18 + Math.random() * 16,
-        c, s: 2 + Math.random() * 3
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 18 + Math.random() * 14,
+        c: i % 4 === 0 ? "#fff4bd" : i % 4 === 1 ? "#71d5c5" : c,
+        s: i % 3 === 0 ? 5 : 3
       });
     }
   }
@@ -1299,13 +1316,29 @@
 
   function drawEntity(e) {
     if (e.type === "cannon" && e.alive) {
+      const bodyY = e.side === "top" ? 0 : e.y + 40;
+      const bodyH = e.side === "top" ? Math.max(0, e.h - 20) : Math.max(0, e.h - 40);
+      ctx.fillStyle = "#061e28";
+      ctx.fillRect(e.x + 7, bodyY, 38, bodyH);
+      ctx.fillStyle = "#155348";
+      ctx.fillRect(e.x + 11, bodyY, 29, bodyH);
+      ctx.fillStyle = "#2b8067";
+      ctx.fillRect(e.x + 13, bodyY, 4, bodyH);
+      ctx.fillStyle = "#0c3838";
+      ctx.fillRect(e.x + 34, bodyY, 5, bodyH);
+      for (let y = Math.ceil(bodyY / 38) * 38; y < bodyY + bodyH; y += 38) {
+        ctx.fillStyle = "#092b32";
+        ctx.fillRect(e.x + 9, y, 33, 5);
+        ctx.fillStyle = "#6ba889";
+        ctx.fillRect(e.x + 11, y, 31, 2);
+        ctx.fillStyle = "#e9b957";
+        ctx.fillRect(e.x + 20, y + 12, 9, 3);
+        ctx.fillStyle = "#0a2933";
+        ctx.fillRect(e.x + 20, y + 16, 9, 3);
+      }
       if (e.side === "top") {
-        ctx.fillStyle = "#0d6b4a";
-        ctx.fillRect(e.x + 10, 0, 26, e.h - 20);
         ctx.drawImage(SPR.cannonL, e.x, e.h - 52);
       } else {
-        ctx.fillStyle = "#0d6b4a";
-        ctx.fillRect(e.x + 10, e.y + 40, 26, e.h);
         ctx.drawImage(SPR.cannonL, e.x, e.y);
       }
     } else if (e.type === "shark" && e.alive) {
@@ -1338,18 +1371,30 @@
       ctx.fillText(label, e.x + e.w / 2, e.y + e.h - 2);
       ctx.textAlign = "left";
     } else if (e.type === "connector") {
-      ctx.globalAlpha = e.missed ? 0.25 : (e.linked ? 0.45 : 1);
-      ctx.drawImage(SPR.connectors[e.kind], e.x, e.y);
-      if (e.linked) {
-        ctx.strokeStyle = "#7fd7ff";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(e.x + 18, e.y + 18, 17, 0, Math.PI * 2);
-        ctx.stroke();
+      ctx.save();
+      ctx.globalAlpha = e.missed ? 0.25 : (e.linked ? 0.5 : 1);
+      if (!e.linked && !e.missed) {
+        const pulse = reducedMotion ? 0 : (state.t >> 3) % 2;
+        ctx.fillStyle = pulse ? "#b8f9ec" : "#67cabd";
+        ctx.fillRect(e.x + 12, e.y - 5, 12, 3);
+        ctx.fillRect(e.x + 12, e.y + 34, 12, 3);
+        ctx.fillRect(e.x - 5, e.y + 12, 3, 12);
+        ctx.fillRect(e.x + 34, e.y + 12, 3, 12);
       }
-      ctx.globalAlpha = 1;
+      ctx.drawImage(SPR.connectors[e.kind], e.x - 2, e.y - 2);
+      if (e.linked) {
+        ctx.fillStyle = "#b8f9ec";
+        ctx.fillRect(e.x + 2, e.y + 2, 5, 3);
+        ctx.fillRect(e.x + 27, e.y + 27, 5, 3);
+      }
+      ctx.restore();
     } else if (e.type === "bolt" && e.alive) {
-      ctx.drawImage(SPR.bolt, e.x, e.y);
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = "#f2a900";
+      ctx.fillRect(e.x + 13, e.y + 3, 13, 2);
+      ctx.restore();
+      ctx.drawImage(SPR.bolt, e.x, e.y, e.w, e.h);
     } else if (e.type === "rocket" && e.alive) {
       ctx.drawImage(SPR.rocket, e.x, e.y);
     } else if (e.type === "goal" && e.alive) {
@@ -1451,29 +1496,31 @@
     if (!nodes.length && !state.needLink) return;
     const p = state.player;
     ctx.save();
-    ctx.strokeStyle = "#e8d48a";
-    ctx.lineWidth = 2.4;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.setLineDash([7, 5]);
+    const points = nodes.map((n) => ({ x: n.x + 16, y: n.y + 16 }));
+    points.push({ x: p.x + 8, y: p.y + p.h / 2 + 6 });
+    ctx.strokeStyle = "#092832";
+    ctx.lineWidth = 7;
+    ctx.lineJoin = "bevel";
     ctx.beginPath();
-    let started = false;
-    for (const n of nodes) {
-      if (!started) { ctx.moveTo(n.x + 16, n.y + 16); started = true; }
-      else ctx.lineTo(n.x + 16, n.y + 16);
-    }
-    if (started) ctx.lineTo(p.x + 8, p.y + p.h / 2 + 6);
-    else if (state.needLink) ctx.moveTo(p.x + 8, p.y + p.h / 2 + 6);
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.stroke();
+    ctx.strokeStyle = "#64c6b4";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([9, 5]);
+    ctx.lineDashOffset = reducedMotion ? 0 : -(state.t % 14);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "#d4a017";
-    ctx.beginPath();
-    ctx.arc(p.x + 6, p.y + p.h / 2 + 8, 6, 0, Math.PI * 2);
-    ctx.fill();
+    for (const node of points.slice(0, -1)) {
+      ctx.fillStyle = "#092832";
+      ctx.fillRect(node.x - 5, node.y - 5, 10, 10);
+      ctx.fillStyle = "#b5f5d7";
+      ctx.fillRect(node.x - 2, node.y - 2, 4, 4);
+    }
+    ctx.fillStyle = "#092832";
+    ctx.fillRect(p.x + 1, p.y + p.h / 2 + 1, 12, 12);
     ctx.fillStyle = "#f0d060";
-    ctx.beginPath();
-    ctx.arc(p.x + 5, p.y + p.h / 2 + 7, 2.4, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(p.x + 4, p.y + p.h / 2 + 4, 6, 6);
     ctx.restore();
   }
 
@@ -1511,8 +1558,10 @@
     }
     for (const pt of state.parts) {
       ctx.globalAlpha = Math.min(1, pt.life / 14);
+      ctx.fillStyle = "#082b34";
+      ctx.fillRect(Math.round(pt.x) - 1, Math.round(pt.y) - 1, pt.s + 2, pt.s + 2);
       ctx.fillStyle = pt.c;
-      ctx.fillRect(pt.x, pt.y, pt.s, pt.s);
+      ctx.fillRect(Math.round(pt.x), Math.round(pt.y), pt.s, pt.s);
       ctx.globalAlpha = 1;
     }
 
@@ -1521,11 +1570,20 @@
       const alpha = Math.min(1, effect.life / 12);
       if (effect.type === "ring") {
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = effect.color;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(effect.x, effect.y, reducedMotion ? 16 : 8 + progress * 30, 0, Math.PI * 2);
-        ctx.stroke();
+        const radius = reducedMotion ? 16 : 8 + progress * 30;
+        const size = Math.round(radius * 2);
+        const left = Math.round(effect.x - radius);
+        const top = Math.round(effect.y - radius);
+        ctx.fillStyle = "#092b34";
+        ctx.fillRect(left - 2, top - 2, size + 4, 4);
+        ctx.fillRect(left - 2, top + size - 2, size + 4, 4);
+        ctx.fillRect(left - 2, top, 4, size);
+        ctx.fillRect(left + size - 2, top, 4, size);
+        ctx.fillStyle = effect.color;
+        ctx.fillRect(left, top, size, 2);
+        ctx.fillRect(left, top + size - 2, size, 2);
+        ctx.fillRect(left, top, 2, size);
+        ctx.fillRect(left + size - 2, top, 2, size);
         ctx.globalAlpha = 1;
       } else if (effect.type === "text") {
         ctx.globalAlpha = alpha;
