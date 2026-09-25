@@ -48,19 +48,7 @@
       <rect x="2" y="18" width="6" height="7" fill="#7fd7ff"/>
     </symbol>
     <symbol id="mule" viewBox="0 0 40 40">
-      <rect x="7" y="2" width="7" height="13" fill="#d4a017"/>
-      <rect x="26" y="2" width="7" height="13" fill="#d4a017"/>
-      <rect x="10" y="8" width="20" height="22" fill="#f0c45c"/>
-      <rect x="5" y="14" width="8" height="13" fill="#e2a833"/>
-      <rect x="27" y="14" width="8" height="13" fill="#e2a833"/>
-      <rect x="11" y="26" width="18" height="10" fill="#e2a833"/>
-      <rect x="13" y="16" width="4" height="4" fill="#0a1c25"/>
-      <rect x="23" y="16" width="4" height="4" fill="#0a1c25"/>
-      <rect x="16" y="28" width="8" height="4" fill="#f5e4b2"/>
-      <rect x="17" y="29" width="2" height="2" fill="#28363a"/>
-      <rect x="21" y="29" width="2" height="2" fill="#28363a"/>
-      <rect x="7" y="13" width="4" height="6" fill="#bd7924"/>
-      <rect x="29" y="13" width="4" height="6" fill="#bd7924"/>
+      <path fill="#00a1e0" d="M12 3h6v11h5V5h7v13h4v12h-5v6H17v-5h-6v-5H6v-7H2v-7h9v-4h1z"/>
     </symbol>
     <style>
       text { font-family: monospace; }
@@ -166,7 +154,7 @@
   <g transform="translate(24 610)">
     <rect class="card" width="1152" height="208" rx="5"/>
     <text x="18" y="29" fill="#f0d060" font-size="16" font-weight="bold">HUD PROPOSAL · FIVE MULE-HEAD LIVES</text>
-    <text x="18" y="52" class="small">Pixel mule-head icons inspired by the game's subject matter; bright = remaining life, dim = lost life.</text>
+    <text x="18" y="52" class="small">Plain single-blue mule-head silhouettes; bright = remaining life, dim = lost life.</text>
     <rect x="18" y="70" width="1116" height="74" rx="3" fill="#071820" stroke="#28556a"/>
     <text x="35" y="99" fill="#f0d060" font-size="12" font-weight="bold">VESTED $001204</text>
     <text x="314" y="99" fill="#7fd7ff" font-size="12" font-weight="bold">L3 DATAWEAVE CHASM</text>
