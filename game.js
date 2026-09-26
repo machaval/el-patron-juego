@@ -2319,7 +2319,7 @@
     ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = "rgba(111, 193, 211, 0.12)";
     ctx.lineWidth = 1;
-    for (let x = -((state.bonusTicks * 0.35) % 80); x < W; x += 80) {
+    for (let x = -((reducedMotion ? 0 : state.bonusTicks * 0.35) % 80); x < W; x += 80) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
     for (let y = 60; y < H; y += 60) {
