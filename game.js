@@ -1114,7 +1114,7 @@
   function trabajeen() {
     if (state.mode !== "play") return;
     const L = LEVELS[state.level];
-    if (state.trabajeen <= 0 || state.squad.length <= 0) {
+    if (state.trabajeen <= 0 || (!state.bossActive && state.squad.length <= 0)) {
       addScoreEffect(state.player.x + 26, state.player.y - 12, "NO CHARGES", "#cde8f5");
       return;
     }
@@ -1124,26 +1124,25 @@
     audio.shout();
     banner("TRABAAAJEEN!");
 
-    state.squad.forEach((s) => { s.fire = 22; });
-
     if (state.bossActive) {
-      for (const shooter of state.squad) {
-        if (shooter.x < -24 || shooter.x > W) continue;
-        state.ents.push({
-          type: "rocket",
-          x: shooter.x + 30,
-          y: shooter.y + 20,
-          w: 22,
-          h: 10,
-          vx: 7.2,
-          vy: 0,
-          freeFlight: true,
-          life: 180,
-          alive: true
-        });
-      }
+      const player = state.player;
+      state.ents.push({
+        type: "rocket",
+        x: player.x + player.w - 3,
+        y: player.y + player.h / 2 - 5,
+        w: 22,
+        h: 10,
+        vx: 7.2,
+        vy: 0,
+        freeFlight: true,
+        playerShot: true,
+        life: 180,
+        alive: true
+      });
       return;
     }
+
+    state.squad.forEach((s) => { s.fire = 22; });
 
     const px = state.player.x + state.player.w / 2;
     const py = state.player.y + state.player.h / 2;
@@ -1204,7 +1203,7 @@
   function rocketHit(rocket, target) {
     if (!target?.alive) return false;
     if (target.type === "boss") {
-      if (target.hitCooldown > 0) return false;
+      if (!rocket.playerShot || !state.bossActive || target.hitCooldown > 0) return false;
       target.hp--;
       target.hitCooldown = 36;
       target.rocketTargeted = false;
@@ -1241,6 +1240,10 @@
       state.squad.push({ x: 90, y: state.player.y - 30, kick: 0, fire: 0 });
     }
     for (const entity of state.ents) {
+      if (entity.type === "rocket" && entity.alive) {
+        if (entity.target) entity.target.rocketTargeted = false;
+        entity.alive = false;
+      }
       if (["shark", "bug", "cannon", "bolt"].includes(entity.type)) entity.alive = false;
     }
     banner(boss.config.name + " BOSS · T TO FIRE");
