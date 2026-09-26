@@ -697,12 +697,12 @@
 
   // The boss encounters use the same movement and Trabajeen input as the levels.
   const BOSSES = [
-    { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, w: 160, h: 100, vy: 0.8, color: "#f2a900", attackEvery: 112, shotSpeed: 4.2 },
-    { name: "BOOMI", creature: "manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, vy: 1.0, color: "#83bce8", attackEvery: 106, shotSpeed: 4.4 },
-    { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, vy: 0.85, color: "#f09475", attackEvery: 128, shotSpeed: 4.2, shotOffsets: [-25, 25] },
-    { name: "KONG", creature: "electric eel", sheetX: 0, sheetY: 560, sheetH: 400, w: 184, h: 88, vy: 1.2, color: "#5fe4ec", attackEvery: 108, shotSpeed: 4.9 },
-    { name: "TIBCO", creature: "pufferfish", sheetX: 512, sheetY: 560, sheetH: 400, w: 132, h: 128, vy: 0.72, color: "#edc95d", attackEvery: 154, shotSpeed: 4.1, shotOffsets: [-30, 30] },
-    { name: "ORACLE", creature: "sea turtle", sheetX: 1024, sheetY: 560, sheetH: 400, w: 170, h: 108, vy: 0.9, color: "#91c9a4", attackEvery: 148, shotSpeed: 4.5, shotOffsets: [-34, 34] }
+    { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, w: 160, h: 100, color: "#f2a900" },
+    { name: "BOOMI", creature: "manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, color: "#83bce8" },
+    { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, color: "#f09475" },
+    { name: "KONG", creature: "electric eel", sheetX: 0, sheetY: 560, sheetH: 400, w: 184, h: 88, color: "#5fe4ec" },
+    { name: "TIBCO", creature: "pufferfish", sheetX: 512, sheetY: 560, sheetH: 400, w: 132, h: 128, color: "#edc95d" },
+    { name: "ORACLE", creature: "sea turtle", sheetX: 1024, sheetY: 560, sheetH: 400, w: 170, h: 108, color: "#91c9a4" }
   ];
   const bossSheet = new Image();
   bossSheet.src = "design-review/boss-creatures-pixel-concept.png";
@@ -1069,10 +1069,18 @@
 
     if (BOSSES[state.level]) {
       const config = BOSSES[state.level];
+      const stage = Math.min(state.level, BOSSES.length - 1);
+      const shotCount = stage + 1;
+      const shotOffsets = Array.from({ length: shotCount }, (_, index) => (index - (shotCount - 1) / 2) * 18);
       state.boss = {
         type: "boss", config,
         x: L.length - 350, y: H / 2 - config.h / 2, w: config.w, h: config.h,
-        vy: config.vy, hp: 3, maxHp: 3, attackTimer: 100,
+        vy: 0.8 + stage * 0.12,
+        shotSpeed: 4.2 + stage * 0.32,
+        attackEvery: 112 - stage * 6,
+        firstAttackDelay: 100 - stage * 6,
+        shotOffsets,
+        hp: 3, maxHp: 3, attackTimer: 100,
         warn: 0, hitCooldown: 0, alive: true
       };
       state.ents.push(state.boss);
@@ -1226,7 +1234,7 @@
   function engageBoss(boss) {
     state.bossActive = true;
     state.bossTime = 0;
-    boss.attackTimer = 100;
+    boss.attackTimer = boss.firstAttackDelay;
     state.trabajeen = Math.max(state.trabajeen, 3);
     if (!state.squad.length) {
       state.squad.push({ x: 90, y: state.player.y - 30, kick: 0, fire: 0 });
@@ -1250,14 +1258,14 @@
     if (boss.warn > 0) {
       boss.warn--;
       if (boss.warn === 0) {
-        for (const offset of boss.config.shotOffsets || [0]) {
+        for (const offset of boss.shotOffsets) {
           state.ents.push({
             type: "bolt", bossShot: true,
             x: boss.x - 16, y: boss.shotY + offset, w: 14, h: 8,
-            vx: -boss.config.shotSpeed, vy: 0, alive: true
+            vx: -boss.shotSpeed, vy: 0, alive: true
           });
         }
-        boss.attackTimer = boss.config.attackEvery;
+        boss.attackTimer = boss.attackEvery;
       }
     } else if (--boss.attackTimer <= 0) {
       boss.warn = 36;
@@ -2060,7 +2068,7 @@
         ctx.strokeStyle = e.warn % 8 < 4 ? "#fff0a8" : "#ff8060";
         ctx.lineWidth = 3;
         ctx.setLineDash([10, 7]);
-        for (const offset of e.config.shotOffsets || [0]) {
+        for (const offset of e.shotOffsets) {
           ctx.beginPath();
           ctx.moveTo(0, e.shotY + offset + 4);
           ctx.lineTo(e.x, e.shotY + offset + 4);
