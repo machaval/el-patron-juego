@@ -848,7 +848,15 @@
     perfectLinkRun: false,
     boss: null,
     bossActive: false,
-    bossTime: 0
+    bossTime: 0,
+    bonusTicks: 0,
+    bonusSeconds: 0,
+    bonusMultiplier: 1,
+    bonusBaseVested: 0,
+    bonusSpeed: 4,
+    bonusRandom: null,
+    bonusEnded: false,
+    pausedFrom: "play"
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -1075,8 +1083,8 @@
   }
 
   function flap() {
-    if (state.mode !== "play") return;
-    state.player.vy = LEVELS[state.level].flap;
+    if (state.mode !== "play" && state.mode !== "bonus") return;
+    state.player.vy = state.mode === "bonus" ? -5.9 : LEVELS[state.level].flap;
     state.kick = 8;
     audio.flap();
     state.bubbles.push({
@@ -1244,10 +1252,96 @@
         state.health = state.maxHealth;
         addScoreEffect(state.player.x + 35, state.player.y - 12, "LIVES RESTORED", "#71dfaa");
       } else {
-        state.mode = "dead";
-        if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+        if (state.mode === "bonus") finishBonus();
+        else {
+          state.mode = "dead";
+          if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+        }
       }
     }
+  }
+
+  function startBonus(devRun = false) {
+    audio.ensure();
+    state.mode = "bonus";
+    state.devRun = devRun;
+    state.level = LEVELS.length - 1;
+    if (devRun) {
+      state.runSeed = createRunSeed();
+      state.vested = 10000;
+    }
+    state.bonusBaseVested = state.vested;
+    state.bonusEnded = false;
+    state.bonusTicks = 0;
+    state.bonusSeconds = 0;
+    state.bonusMultiplier = 1;
+    state.bonusSpeed = 4;
+    state.bonusRandom = createSeededRandom(state.runSeed ^ 0x43524d);
+    state.health = state.maxHealth;
+    state.invuln = 70;
+    state.boss = null;
+    state.bossActive = false;
+    state.ents = [];
+    state.parts = [];
+    state.effects = [];
+    state.bubbles = [];
+    state.links = [];
+    state.squad = [];
+    state.player.x = 170;
+    state.player.y = H / 2;
+    state.player.vy = 0;
+    banner("CRM VESTING SURGE · SURVIVE!");
+    updateControlLabels();
+  }
+
+  function finishBonus() {
+    const bonus = Math.round(state.bonusBaseVested * (state.bonusMultiplier - 1));
+    state.vested = state.bonusBaseVested + bonus;
+    state.bonusEnded = true;
+    state.mode = "win";
+    if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+    updateControlLabels();
+  }
+
+  function spawnBonusColumns() {
+    const gap = Math.max(145, 190 - state.bonusSeconds * 0.75);
+    const gy = 68 + state.bonusRandom() * (H - 138 - gap);
+    const x = W + 40;
+    state.ents.push({ type: "cannon", bonusColumn: true, side: "top", x, y: 0, w: 46, h: gy, alive: true });
+    state.ents.push({ type: "cannon", bonusColumn: true, side: "bot", x, y: gy + gap, w: 46, h: H - gy - gap, alive: true });
+  }
+
+  function updateBonus() {
+    state.t++;
+    state.bonusTicks++;
+    if (state.bonusTicks % 60 === 0) {
+      state.bonusSeconds++;
+      state.bonusMultiplier = Math.round((1 + state.bonusSeconds * 0.1) * 10) / 10;
+    }
+    state.bonusSpeed = Math.min(10, 4 + state.bonusSeconds * 0.12);
+    if (KEY.Space || KEY.ArrowUp || KEY.Pointer) {
+      flap();
+      KEY.Space = KEY.ArrowUp = KEY.Pointer = false;
+    }
+    KEY.KeyT = false;
+    const p = state.player;
+    p.vy += 0.34;
+    p.y += p.vy;
+    if (p.y < 36) { p.y = 36; p.vy = 0; }
+    if (p.y > H - 56) { p.y = H - 56; p.vy = -3; damage("SEA FLOOR"); }
+    if (state.invuln > 0) state.invuln--;
+    if (state.kick > 0) state.kick--;
+    if (state.bannerLife > 0) state.bannerLife--;
+    if (state.damageFlash > 0) state.damageFlash--;
+    if (state.hurtTimer > 0) state.hurtTimer--;
+    const lastColumn = [...state.ents].reverse().find((entity) => entity.bonusColumn);
+    if (!lastColumn || lastColumn.x < W - 255) spawnBonusColumns();
+    const hitbox = { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
+    for (const e of state.ents) {
+      e.x -= state.bonusSpeed;
+      if (e.alive && aabb(hitbox, e)) damage("COLUMN");
+    }
+    state.ents = state.ents.filter((entity) => entity.x + entity.w > -30);
   }
 
   function finishLevel() {
@@ -1265,7 +1359,8 @@
     state.score = 0;
     audio.win();
     if (state.level >= LEVELS.length - 1) {
-      state.mode = "win";
+      if (state.perfectLinkRun && state.linked === state.needLink) startBonus(false);
+      else state.mode = "win";
       return;
     }
     state.transitionTimer = 90;
@@ -1278,6 +1373,7 @@
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
     state.devRun = Boolean(options.devRun);
+    state.bonusEnded = false;
     state.perfectLinkRun = !state.devRun && (retryingAfterDeath
       ? state.perfectLinkRun
       : !fromCheckpoint && options.startLevel === undefined);
@@ -1328,6 +1424,13 @@
         startGame(false, undefined, createRunSeed(), { devRun: true, startLevel: level });
         return;
       }
+      if (KEY.Digit7) {
+        KEY.Digit7 = false;
+        KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+        DEV.panelOpen = false;
+        startBonus(true);
+        return;
+      }
       return;
     }
 
@@ -1365,7 +1468,8 @@
     if (state.mode === "dead" || state.mode === "win") {
       if (KEY.Enter || KEY.Space || KEY.Pointer) {
         KEY.Enter = KEY.Space = KEY.Pointer = false;
-        if (state.devRun) startGame(false, undefined, state.runSeed, { devRun: true, startLevel: state.level });
+        if (state.devRun && state.bonusEnded) startBonus(true);
+        else if (state.devRun) startGame(false, undefined, state.runSeed, { devRun: true, startLevel: state.level });
         else startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint, state.runSeed);
       }
       return;
@@ -1384,13 +1488,15 @@
       return;
     }
 
-    if ((KEY.KeyP || KEY.Escape) && ["play", "paused"].includes(state.mode)) {
-      state.mode = state.mode === "paused" ? "play" : "paused";
+    if ((KEY.KeyP || KEY.Escape) && ["play", "bonus", "paused"].includes(state.mode)) {
+      if (state.mode === "paused") state.mode = state.pausedFrom;
+      else { state.pausedFrom = state.mode; state.mode = "paused"; }
       KEY.KeyP = KEY.Escape = false;
       updateControlLabels();
       return;
     }
     if (state.mode === "paused") return;
+    if (state.mode === "bonus") { updateBonus(); return; }
 
     state.t++;
 
@@ -2204,6 +2310,81 @@
     }
   }
 
+  function drawBonusBg() {
+    const gradient = ctx.createLinearGradient(0, 0, 0, H);
+    gradient.addColorStop(0, "#10283a");
+    gradient.addColorStop(0.55, "#123445");
+    gradient.addColorStop(1, "#061825");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(111, 193, 211, 0.12)";
+    ctx.lineWidth = 1;
+    for (let x = -((state.bonusTicks * 0.35) % 80); x < W; x += 80) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 60; y < H; y += 60) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    const drift = reducedMotion ? 0 : state.bonusTicks * 0.8;
+    const rise = Math.min(135, state.bonusTicks * 0.025);
+    for (let layer = 0; layer < 2; layer++) {
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 8) {
+        const wave = Math.sin((x + drift * (layer ? 0.55 : 1)) * 0.023) * 12 +
+          Math.sin((x + drift * (layer ? 0.35 : 0.8)) * 0.063) * 6;
+        const y = H - 80 - x * (layer ? 0.13 : 0.19) - rise + wave - layer * 62;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = layer ? "rgba(111, 215, 255, 0.25)" : "rgba(90, 232, 158, 0.68)";
+      ctx.lineWidth = layer ? 2 : 4;
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(4, 18, 28, 0.5)";
+    ctx.fillRect(0, H - 34, W, 34);
+    ctx.fillStyle = "#60dfa0";
+    ctx.font = "18px 'VT323', monospace";
+    ctx.fillText("CRM ▲", W - 84, H - 12);
+  }
+
+  function drawBonus() {
+    drawBonusBg();
+    for (const entity of state.ents) drawEntity(entity);
+    drawHero();
+    ctx.fillStyle = "rgba(4, 16, 24, 0.86)";
+    ctx.fillRect(0, 0, W, 48);
+    ctx.fillStyle = "#60dfa0";
+    ctx.font = "11px 'Press Start 2P', monospace";
+    ctx.fillText("CRM VESTING SURGE", 12, 20);
+    ctx.fillStyle = "#e4f3f8";
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("TIME " + state.bonusSeconds + "s", 14, 42);
+    ctx.fillText("SPEED " + state.bonusSpeed.toFixed(1), 150, 42);
+    ctx.fillText("BASE $" + state.bonusBaseVested, 280, 42);
+    ctx.fillStyle = "#ffe680";
+    ctx.font = "bold 30px 'VT323', monospace";
+    ctx.fillText("x" + state.bonusMultiplier.toFixed(1), 626, 37);
+    for (let i = 0; i < state.maxHealth; i++) {
+      ctx.save();
+      ctx.globalAlpha = i < state.health ? 1 : 0.2;
+      ctx.drawImage(SPR.lifeIcon, W - 142 + i * 25, 12, 21, 21);
+      ctx.restore();
+    }
+    if (state.banner && state.bannerLife > 0) {
+      ctx.fillStyle = "#ffe680";
+      ctx.font = "11px 'Press Start 2P', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(state.banner, W / 2, 80);
+      ctx.textAlign = "left";
+    }
+    if (state.damageFlash > 0) {
+      ctx.globalAlpha = (state.damageFlash / 10) * 0.22;
+      ctx.fillStyle = "#ff3048";
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function drawLevelTransition() {
     drawPlay();
     ctx.fillStyle = "rgba(0, 8, 14, 0.72)";
@@ -2231,9 +2412,9 @@
     ctx.fillText("PAUSED", W / 2, H / 2 - 8);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "24px 'VT323', monospace";
-    ctx.fillText("LEVEL " + (state.level + 1) + " · " + LEVELS[state.level].name, W / 2, H / 2 + 22);
+    ctx.fillText(state.pausedFrom === "bonus" ? "CRM VESTING SURGE" : "LEVEL " + (state.level + 1) + " · " + LEVELS[state.level].name, W / 2, H / 2 + 22);
     ctx.font = "18px 'VT323', monospace";
-    ctx.fillText(LEVELS[state.level].sub, W / 2, H / 2 + 46);
+    ctx.fillText(state.pausedFrom === "bonus" ? "Survive columns to raise your score multiplier." : LEVELS[state.level].sub, W / 2, H / 2 + 46);
     ctx.font = "24px 'VT323', monospace";
     ctx.fillText("Press P / ESC or tap RESUME", W / 2, H / 2 + 72);
     ctx.textAlign = "left";
@@ -2254,7 +2435,7 @@
     ctx.fillText("DEVELOPER TOOLS", W / 2, 164);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Press 1–6 to start at a level", W / 2, 198);
+    ctx.fillText("Press 1–6 for a level · 7 for CRM SURGE", W / 2, 198);
     for (let i = 0; i < LEVELS.length; i++) {
       const col = i < 3 ? 0 : 1;
       const row = i % 3;
@@ -2266,11 +2447,14 @@
       ctx.fillText((i + 1) + ". " + LEVELS[i].name, x, y);
     }
     ctx.textAlign = "center";
+    ctx.fillStyle = "#71dfaa";
+    ctx.font = "bold 20px 'VT323', monospace";
+    ctx.fillText("7. CRM VESTING SURGE · BONUS", W / 2, 330);
     ctx.fillStyle = DEV.godMode ? "#71dfaa" : "#cde8f5";
     ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("G: GOD MODE " + (DEV.godMode ? "ON · UNLIMITED LIVES" : "OFF"), W / 2, 348);
+    ctx.fillText("G: GOD MODE " + (DEV.godMode ? "ON · UNLIMITED LIVES" : "OFF"), W / 2, 360);
     ctx.fillStyle = "#9dc2d0";
-    ctx.fillText("F2 or ESC: close developer tools", W / 2, 385);
+    ctx.fillText("F2 or ESC: close developer tools", W / 2, 390);
     ctx.restore();
   }
 
@@ -2289,7 +2473,7 @@
     if (hero) ctx.drawImage(hero, W / 2 - hero.width / 2, 168);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "26px 'VT323', monospace";
-    ctx.fillText("Dodge SAP cannons and sharks. Link Anypoint connectors.", W / 2, 320);
+    ctx.fillText("Dodge hazards, defeat bosses, and link every connector for CRM SURGE.", W / 2, 320);
     ctx.fillText("SPACE flap   ·   T Trabajeen!   ·   P pause   ·   M mute   ·   R effects", W / 2, 348);
     ctx.fillStyle = "#f0d060";
     ctx.fillText("ENTER / SPACE: NEW RUN", W / 2, 390);
@@ -2313,10 +2497,13 @@
     ctx.textAlign = "center";
     ctx.fillStyle = "#f0d060";
     ctx.font = "16px 'Press Start 2P', monospace";
-    ctx.fillText(win ? "SAP CONQUERED · IPO" : "RUNTIME CRASH", W / 2, 220);
+    ctx.fillText(win ? (state.bonusEnded ? "CRM VESTING SURGE" : "SAP CONQUERED · IPO") : "RUNTIME CRASH", W / 2, 220);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "28px 'VT323', monospace";
     ctx.fillText("Vested options: $" + state.vested, W / 2, 270);
+    if (state.bonusEnded) {
+      ctx.fillText(state.bonusSeconds + "s survived · x" + state.bonusMultiplier.toFixed(1) + " multiplier", W / 2, 292);
+    }
     ctx.fillText(state.checkpoint > 0 && !win ? "ENTER resume from L" + (state.checkpoint + 1) : "ENTER to dive again", W / 2, 314);
     ctx.font = "22px 'VT323', monospace";
     ctx.fillText("Run seed: " + state.runSeed, W / 2, 348);
@@ -2354,6 +2541,10 @@
     else if (state.mode === "dead") drawEnd(false);
     else if (state.mode === "win") drawEnd(true);
     else if (state.mode === "level-transition") drawLevelTransition();
+    else if (state.mode === "bonus" || (state.mode === "paused" && state.pausedFrom === "bonus")) {
+      drawBonus();
+      if (state.mode === "paused") drawPauseOverlay();
+    }
     else {
       drawPlay();
       if (state.mode === "paused") drawPauseOverlay();
