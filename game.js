@@ -1984,19 +1984,21 @@
       ctx.restore();
     } else if (e.type === "boss" && e.alive) {
       ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+      ctx.scale(-1, 1);
       if (bossSheet.complete && bossSheet.naturalWidth) {
-        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
           bossSheet, e.config.sheetX, e.config.sheetY, 512, e.config.sheetH,
-          e.x - 13, e.y - 15, e.w + 26, e.h + 30
+          -(e.w + 26) / 2, -(e.h + 30) / 2, e.w + 26, e.h + 30
         );
       } else {
         const fallback = SPR.bugs[1];
-        ctx.drawImage(fallback.image, fallback.sx, fallback.sy, fallback.sw, fallback.sh, e.x, e.y, e.w, e.h);
+        ctx.drawImage(fallback.image, fallback.sx, fallback.sy, fallback.sw, fallback.sh, -e.w / 2, -e.h / 2, e.w, e.h);
       }
       if (e.hitCooldown > 0 && e.hitCooldown % 6 < 3) {
         ctx.fillStyle = "rgba(255, 245, 180, 0.35)";
-        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.fillRect(-e.w / 2, -e.h / 2, e.w, e.h);
       }
       ctx.restore();
       ctx.fillStyle = "#071820";
