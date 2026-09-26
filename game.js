@@ -848,6 +848,32 @@
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
+  function segmentHitsRect(x1, y1, x2, y2, rect) {
+    let enter = 0;
+    let exit = 1;
+    const axes = [
+      [x1, x2 - x1, rect.x, rect.x + rect.w],
+      [y1, y2 - y1, rect.y, rect.y + rect.h]
+    ];
+    for (const [origin, delta, min, max] of axes) {
+      if (Math.abs(delta) < 0.0001) {
+        if (origin < min || origin > max) return false;
+        continue;
+      }
+      const t1 = (min - origin) / delta;
+      const t2 = (max - origin) / delta;
+      enter = Math.max(enter, Math.min(t1, t2));
+      exit = Math.min(exit, Math.max(t1, t2));
+      if (enter > exit) return false;
+    }
+    return true;
+  }
+
+  function isRocketTarget(entity) {
+    return entity.type === "shark" || entity.type === "bug" ||
+      entity.type === "cannon" || entity.type === "bolt";
+  }
+
   function connectorPickupBox(player) {
     return {
       x: player.x - 34,
@@ -1049,7 +1075,7 @@
     const px = state.player.x + state.player.w / 2;
     const py = state.player.y + state.player.h / 2;
     const foes = state.ents.filter((e) => {
-      if (!e.alive || e.x + e.w <= 0 || e.x >= W) return false;
+      if (!e.alive || e.rocketTargeted || e.x + e.w <= 0 || e.x >= W) return false;
       if (state.level === 1) return e.type === "shark";
       return e.type === "bug" || e.type === "cannon" || e.type === "bolt" || e.type === "shark";
     });
@@ -1085,11 +1111,7 @@
     }
     for (let i = 0; i < n; i++) {
       const e = foes[i];
-      e.alive = false;
-      const points = e.type === "cannon" ? 80 : 50;
-      state.score += points;
-      addScoreEffect(e.x + 8, e.y + 4, "+" + points, "#ffd86b");
-      burst(e.x + 8, e.y + 4, "#ff8040", 12);
+      e.rocketTargeted = true;
       const shooter = state.squad[i % state.squad.length];
       state.ents.push({
         type: "rocket",
@@ -1097,14 +1119,25 @@
         y: shooter.y + 20,
         w: 22,
         h: 10,
-        tx: e.x + 8,
-        ty: e.y + 4,
+        target: e,
         freeFlight: false,
-        life: 18,
+        life: 90,
         alive: true
       });
     }
-    if (n) audio.boom();
+  }
+
+  function rocketHit(rocket, target) {
+    if (!target?.alive) return false;
+    target.alive = false;
+    target.rocketTargeted = false;
+    rocket.alive = false;
+    const points = target.type === "cannon" ? 80 : 50;
+    state.score += points;
+    addScoreEffect(target.x + target.w / 2, target.y + target.h / 2, "+" + points, "#ffd86b");
+    burst(target.x + target.w / 2, target.y + target.h / 2, "#ff8040", 12);
+    audio.boom();
+    return true;
   }
 
   function damage(reason = "HAZARD") {
@@ -1433,12 +1466,47 @@
         if (e.freeFlight) {
           e.x += e.vx;
           e.y += e.vy;
-          if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
         } else {
-          e.x += (e.tx - e.x) * 0.25;
-          e.y += (e.ty - e.y) * 0.25;
+          if (!e.target?.alive) {
+            if (e.target) e.target.rocketTargeted = false;
+            e.target = null;
+            e.freeFlight = true;
+            e.vx = e.x - e.prevX || 5;
+            e.vy = e.y - e.prevY || 0;
+          } else {
+            const dx = e.target.x + e.target.w / 2 - (e.x + e.w / 2);
+            const dy = e.target.y + e.target.h / 2 - (e.y + e.h / 2);
+            const distance = Math.hypot(dx, dy) || 1;
+            const speed = Math.min(8, distance);
+            e.vx = dx / distance * speed;
+            e.vy = dy / distance * speed;
+            e.x += e.vx;
+            e.y += e.vy;
+          }
         }
+        const halfW = e.w / 2;
+        const halfH = e.h / 2;
+        const sweptFoes = state.ents.filter((target) => {
+          if (!isRocketTarget(target) || !target.alive) return false;
+          if (!e.freeFlight && target !== e.target) return false;
+          const expanded = {
+            x: target.x - halfW,
+            y: target.y - halfH,
+            w: target.w + e.w,
+            h: target.h + e.h
+          };
+          return segmentHitsRect(
+            e.prevX + halfW,
+            e.prevY + halfH,
+            e.x + halfW,
+            e.y + halfH,
+            expanded
+          );
+        });
+        if (sweptFoes.length) rocketHit(e, sweptFoes[0]);
+        if (e.freeFlight && (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24)) e.alive = false;
         if (e.life <= 0) e.alive = false;
+        if (!e.alive && e.target) e.target.rocketTargeted = false;
       }
 
       if (e.type === "goal" && e.alive && e.x + e.w < p.x + 8) finishLevel();
