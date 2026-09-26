@@ -696,7 +696,10 @@
   const BOSSES = [
     { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, w: 160, h: 100, vy: 0.8, color: "#f2a900", attackEvery: 112, shotSpeed: 4.2 },
     { name: "BOOMI", creature: "manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, vy: 1.0, color: "#83bce8", attackEvery: 106, shotSpeed: 4.4 },
-    { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, vy: 0.85, color: "#f09475", attackEvery: 128, shotSpeed: 4.2, shotOffsets: [-25, 25] }
+    { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, vy: 0.85, color: "#f09475", attackEvery: 128, shotSpeed: 4.2, shotOffsets: [-25, 25] },
+    { name: "KONG", creature: "electric eel", sheetX: 0, sheetY: 560, sheetH: 400, w: 184, h: 88, vy: 1.2, color: "#5fe4ec", attackEvery: 108, shotSpeed: 4.9 },
+    { name: "TIBCO", creature: "pufferfish", sheetX: 512, sheetY: 560, sheetH: 400, w: 132, h: 128, vy: 0.72, color: "#edc95d", attackEvery: 154, shotSpeed: 4.1, shotOffsets: [-30, 30] },
+    { name: "ORACLE", creature: "sea turtle", sheetX: 1024, sheetY: 560, sheetH: 400, w: 170, h: 108, vy: 0.9, color: "#91c9a4", attackEvery: 148, shotSpeed: 4.5, shotOffsets: [-34, 34] }
   ];
   const bossSheet = new Image();
   bossSheet.src = "design-review/boss-creatures-pixel-concept.png";
