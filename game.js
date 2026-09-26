@@ -694,7 +694,9 @@
 
   // The boss encounters use the same movement and Trabajeen input as the levels.
   const BOSSES = [
-    { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, color: "#f2a900", attackEvery: 112, shotSpeed: 4.2 }
+    { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, w: 160, h: 100, vy: 0.8, color: "#f2a900", attackEvery: 112, shotSpeed: 4.2 },
+    { name: "BOOMI", creature: "manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, vy: 1.0, color: "#83bce8", attackEvery: 106, shotSpeed: 4.4 },
+    { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, vy: 0.85, color: "#f09475", attackEvery: 128, shotSpeed: 4.2, shotOffsets: [-25, 25] }
   ];
   const bossSheet = new Image();
   bossSheet.src = "design-review/boss-creatures-pixel-concept.png";
@@ -1047,10 +1049,11 @@
     }
 
     if (BOSSES[state.level]) {
+      const config = BOSSES[state.level];
       state.boss = {
-        type: "boss", config: BOSSES[state.level],
-        x: L.length - 660, y: H / 2 - 50, w: 160, h: 100,
-        vy: 0.8, hp: 3, maxHp: 3, attackTimer: 100,
+        type: "boss", config,
+        x: L.length - 660, y: H / 2 - config.h / 2, w: config.w, h: config.h,
+        vy: config.vy, hp: 3, maxHp: 3, attackTimer: 100,
         warn: 0, hitCooldown: 0, alive: true
       };
       state.ents.push(state.boss);
@@ -1207,11 +1210,13 @@
     if (boss.warn > 0) {
       boss.warn--;
       if (boss.warn === 0) {
-        state.ents.push({
-          type: "bolt", bossShot: true,
-          x: boss.x - 16, y: boss.shotY, w: 14, h: 8,
-          vx: -boss.config.shotSpeed, vy: 0, alive: true
-        });
+        for (const offset of boss.config.shotOffsets || [0]) {
+          state.ents.push({
+            type: "bolt", bossShot: true,
+            x: boss.x - 16, y: boss.shotY + offset, w: 14, h: 8,
+            vx: -boss.config.shotSpeed, vy: 0, alive: true
+          });
+        }
         boss.attackTimer = boss.config.attackEvery;
       }
     } else if (--boss.attackTimer <= 0) {
@@ -1869,11 +1874,13 @@
       }
       ctx.restore();
       ctx.fillStyle = "#071820";
-      ctx.fillRect(e.x + 26, e.y - 22, e.w - 52, 19);
-      ctx.strokeStyle = e.config.color;
-      ctx.strokeRect(e.x + 26.5, e.y - 21.5, e.w - 53, 18);
-      ctx.fillStyle = "#f4f7fb";
       ctx.font = "bold 16px 'VT323', monospace";
+      const tagWidth = Math.max(e.w - 52, ctx.measureText(e.config.name).width + 18);
+      const tagX = e.x + (e.w - tagWidth) / 2;
+      ctx.fillRect(tagX, e.y - 22, tagWidth, 19);
+      ctx.strokeStyle = e.config.color;
+      ctx.strokeRect(tagX + 0.5, e.y - 21.5, tagWidth - 1, 18);
+      ctx.fillStyle = "#f4f7fb";
       ctx.textAlign = "center";
       ctx.fillText(e.config.name, e.x + e.w / 2, e.y - 7);
       ctx.textAlign = "left";
@@ -1882,10 +1889,12 @@
         ctx.strokeStyle = e.warn % 8 < 4 ? "#fff0a8" : "#ff8060";
         ctx.lineWidth = 3;
         ctx.setLineDash([10, 7]);
-        ctx.beginPath();
-        ctx.moveTo(0, e.shotY + 4);
-        ctx.lineTo(e.x, e.shotY + 4);
-        ctx.stroke();
+        for (const offset of e.config.shotOffsets || [0]) {
+          ctx.beginPath();
+          ctx.moveTo(0, e.shotY + offset + 4);
+          ctx.lineTo(e.x, e.shotY + offset + 4);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     } else if (e.type === "goal" && e.alive) {
