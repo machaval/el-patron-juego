@@ -1985,10 +1985,6 @@
     } else if (e.type === "boss" && e.alive) {
       ctx.save();
       if (bossSheet.complete && bossSheet.naturalWidth) {
-        // The concept art includes a dark aura; the rounded crop keeps it with the creature.
-        ctx.beginPath();
-        ctx.roundRect(e.x - 13, e.y - 15, e.w + 26, e.h + 30, 26);
-        ctx.clip();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
           bossSheet, e.config.sheetX, e.config.sheetY, 512, e.config.sheetH,
