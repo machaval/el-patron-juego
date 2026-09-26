@@ -1072,15 +1072,16 @@
       const stage = Math.min(state.level, BOSSES.length - 1);
       const shotCount = stage + 1;
       const shotOffsets = Array.from({ length: shotCount }, (_, index) => (index - (shotCount - 1) / 2) * 18);
+      const bossHp = 3 + stage;
       state.boss = {
         type: "boss", config,
         x: L.length - 350, y: H / 2 - config.h / 2, w: config.w, h: config.h,
-        vy: 0.8 + stage * 0.12,
+        vy: 0.8 + stage * 0.12 + stage * stage * 0.04,
         shotSpeed: 4.2 + stage * 0.32,
         attackEvery: 112 - stage * 6,
         firstAttackDelay: 100 - stage * 6,
         shotOffsets,
-        hp: 3, maxHp: 3, attackTimer: 100,
+        hp: bossHp, maxHp: bossHp, attackTimer: 100,
         warn: 0, hitCooldown: 0, alive: true
       };
       state.ents.push(state.boss);
@@ -2229,9 +2230,13 @@
       ctx.textAlign = "center";
       ctx.fillText(boss.config.name + " · BOSS", W / 2, 60);
       ctx.textAlign = "left";
+      const barX = W / 2 - 138;
+      const barWidth = 276;
+      const gap = 3;
+      const segmentWidth = (barWidth - gap * (boss.maxHp - 1)) / boss.maxHp;
       for (let i = 0; i < boss.maxHp; i++) {
         ctx.fillStyle = i < boss.hp ? boss.config.color : "#243442";
-        ctx.fillRect(W / 2 - 138 + i * 94, 69, 86, 13);
+        ctx.fillRect(barX + i * (segmentWidth + gap), 69, segmentWidth, 13);
       }
     }
 
