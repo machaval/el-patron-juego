@@ -587,7 +587,7 @@
   const LEVELS = [
     {
       name: "SAP TERRITORY",
-      sub: "El Patrón alone. Dodge cannons and sharks.",
+      sub: "Dodge cannons and sharks. Your squad joins for the SAP boss.",
       sky: ["#08362c", "#0a4a3a", "#041814"],
       accent: "#f2a900",
       length: 4200,
@@ -691,6 +691,13 @@
       fire: true
     }
   ];
+
+  // The boss encounters use the same movement and Trabajeen input as the levels.
+  const BOSSES = [
+    { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, color: "#f2a900", attackEvery: 112, shotSpeed: 4.2 }
+  ];
+  const bossSheet = new Image();
+  bossSheet.src = "design-review/boss-creatures-pixel-concept.png";
 
   const SAVE_KEY = "el-patron-save-v1";
   const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -833,7 +840,10 @@
     checkpoint: 0,
     runSeed: 0,
     devRun: false,
-    perfectLinkRun: false
+    perfectLinkRun: false,
+    boss: null,
+    bossActive: false,
+    bossTime: 0
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -871,7 +881,7 @@
 
   function isRocketTarget(entity) {
     return entity.type === "shark" || entity.type === "bug" ||
-      entity.type === "cannon" || entity.type === "bolt";
+      entity.type === "cannon" || entity.type === "bolt" || entity.type === "boss";
   }
 
   function connectorPickupBox(player) {
@@ -929,6 +939,9 @@
     state.winTimer = 0;
     state.finishing = false;
     state.levelIntroLife = 150;
+    state.boss = null;
+    state.bossActive = false;
+    state.bossTime = 0;
     state.hurtTimer = 0;
     state.player.x = 170;
     state.player.y = H / 2;
@@ -946,7 +959,7 @@
     if (L.cannons) {
       const gapBase = 168 - state.level * 8;
       let x = 420;
-      while (x < L.length - 380) {
+      while (x < L.length - 950) {
         const gap = gapBase + random() * 30;
         const gy = 90 + random() * (H - 220 - gap);
         state.ents.push({
@@ -1033,6 +1046,16 @@
       previousConnectorY = chosen.y;
     }
 
+    if (BOSSES[state.level]) {
+      state.boss = {
+        type: "boss", config: BOSSES[state.level],
+        x: L.length - 660, y: H / 2 - 50, w: 160, h: 100,
+        vy: 0.8, hp: 3, maxHp: 3, attackTimer: 100,
+        warn: 0, hitCooldown: 0, alive: true
+      };
+      state.ents.push(state.boss);
+    }
+
     state.ents.push({
       type: "goal",
       x: L.length - 175,
@@ -1060,7 +1083,7 @@
   function trabajeen() {
     if (state.mode !== "play") return;
     const L = LEVELS[state.level];
-    if (state.trabajeen <= 0 || L.squad <= 0) {
+    if (state.trabajeen <= 0 || state.squad.length <= 0) {
       addScoreEffect(state.player.x + 26, state.player.y - 12, "NO CHARGES", "#cde8f5");
       return;
     }
@@ -1076,6 +1099,7 @@
     const py = state.player.y + state.player.h / 2;
     const foes = state.ents.filter((e) => {
       if (!e.alive || e.rocketTargeted || e.x + e.w <= 0 || e.x >= W) return false;
+      if (e.type === "boss") return state.bossActive && e.hitCooldown <= 0;
       if (state.level === 1) return e.type === "shark";
       return e.type === "bug" || e.type === "cannon" || e.type === "bolt" || e.type === "shark";
     });
@@ -1084,7 +1108,7 @@
       const db = (b.x - px) ** 2 + (b.y - py) ** 2;
       return da - db;
     });
-    const n = Math.min(L.killN, foes.length);
+    const n = Math.min(state.bossActive ? Math.max(1, L.killN) : L.killN, foes.length);
     if (!n) {
       const fan = [
         { vx: 4.6, vy: -2.1 },
@@ -1129,6 +1153,24 @@
 
   function rocketHit(rocket, target) {
     if (!target?.alive) return false;
+    if (target.type === "boss") {
+      if (target.hitCooldown > 0) return false;
+      target.hp--;
+      target.hitCooldown = 36;
+      target.rocketTargeted = false;
+      rocket.alive = false;
+      state.score += 100;
+      addScoreEffect(target.x + target.w / 2, target.y, "BOSS HIT +100", "#ffe680");
+      burst(target.x + target.w / 2, target.y + target.h / 2, target.config.color, 18);
+      audio.boom();
+      if (target.hp <= 0) {
+        target.alive = false;
+        state.bossActive = false;
+        state.score += 300;
+        banner(target.config.name + " DEFEATED · GATE OPEN");
+      }
+      return true;
+    }
     target.alive = false;
     target.rocketTargeted = false;
     rocket.alive = false;
@@ -1138,6 +1180,44 @@
     burst(target.x + target.w / 2, target.y + target.h / 2, "#ff8040", 12);
     audio.boom();
     return true;
+  }
+
+  function engageBoss(boss) {
+    state.bossActive = true;
+    state.bossTime = 0;
+    boss.attackTimer = 100;
+    state.trabajeen = Math.max(state.trabajeen, 3);
+    if (!state.squad.length) {
+      state.squad.push({ x: 90, y: state.player.y - 30, kick: 0, fire: 0 });
+    }
+    for (const entity of state.ents) {
+      if (["shark", "bug", "cannon", "bolt"].includes(entity.type)) entity.alive = false;
+    }
+    banner(boss.config.name + " BOSS · T TO FIRE");
+  }
+
+  function updateBoss(boss, playerHitbox) {
+    if (!state.bossActive) return;
+    state.bossTime++;
+    if (state.bossTime % 240 === 0) state.trabajeen = Math.min(3, state.trabajeen + 1);
+    if (boss.hitCooldown > 0) boss.hitCooldown--;
+    boss.y += boss.vy;
+    if (boss.y < 95 || boss.y + boss.h > H - 65) boss.vy *= -1;
+    if (aabb(playerHitbox, boss)) damage(boss.config.name);
+    if (boss.warn > 0) {
+      boss.warn--;
+      if (boss.warn === 0) {
+        state.ents.push({
+          type: "bolt", bossShot: true,
+          x: boss.x - 16, y: boss.shotY, w: 14, h: 8,
+          vx: -boss.config.shotSpeed, vy: 0, alive: true
+        });
+        boss.attackTimer = boss.config.attackEvery;
+      }
+    } else if (--boss.attackTimer <= 0) {
+      boss.warn = 36;
+      boss.shotY = boss.y + boss.h / 2;
+    }
   }
 
   function damage(reason = "HAZARD") {
@@ -1163,7 +1243,7 @@
   }
 
   function finishLevel() {
-    if (state.finishing || state.health <= 0) return;
+    if (state.finishing || state.health <= 0 || state.boss?.alive) return;
     state.finishing = true;
     const completionBonus = 200 + state.score + state.linked * 80 + state.health * 50;
     state.transitionReward = state.distanceVested + completionBonus;
@@ -1308,6 +1388,7 @@
 
     const L = LEVELS[state.level];
     const p = state.player;
+    const scroll = state.bossActive ? 0 : L.speed;
 
     if (KEY.Space || KEY.ArrowUp || KEY.Pointer) {
       flap();
@@ -1323,7 +1404,7 @@
     if (p.y < 36) { p.y = 36; p.vy = 0; }
     if (p.y > H - 56) { p.y = H - 56; damage("SEA FLOOR"); p.vy = -3; }
 
-    state.dist += L.speed;
+    state.dist += scroll;
     const distanceVested = Math.min(Math.floor(state.dist / VESTING_DISTANCE_STEP), Math.floor(L.length / VESTING_DISTANCE_STEP));
     if (distanceVested > state.distanceVested) {
       state.vested += distanceVested - state.distanceVested;
@@ -1366,7 +1447,6 @@
     for (const pt of state.parts) { pt.x += pt.vx - L.speed * 0.4; pt.y += pt.vy; pt.life--; }
     state.parts = state.parts.filter((pt) => pt.life > 0);
 
-    const scroll = L.speed;
     const hitbox = { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
     const connectorPickup = connectorPickupBox(p);
     let activeBolts = state.ents.filter((entity) => entity.type === "bolt" && entity.alive).length;
@@ -1374,6 +1454,11 @@
     for (const e of state.ents) {
       if (!e.alive && e.type !== "connector") continue;
       if (e.type !== "rocket") e.x -= scroll;
+
+      if (e.type === "boss" && e.alive) {
+        if (!state.bossActive && e.x <= W - 200) engageBoss(e);
+        updateBoss(e, hitbox);
+      }
 
       if (L.fire && e.type === "cannon" && e.alive && e.side === "top" && e.x > 80 && e.x < W - 40 && !e.hasFired) {
         if (e.fireWarn > 0) {
@@ -1426,7 +1511,7 @@
         e.x += e.vx;
         e.y += e.vy;
         e.renderVx = e.vx - scroll;
-        if (aabb(hitbox, e)) { e.alive = false; damage("CANNON SHOT"); }
+        if (aabb(hitbox, e)) { e.alive = false; damage(e.bossShot ? "BOSS SHOT" : "CANNON SHOT"); }
         if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
       }
 
@@ -1487,7 +1572,7 @@
         const halfW = e.w / 2;
         const halfH = e.h / 2;
         const sweptFoes = state.ents.filter((target) => {
-          if (!isRocketTarget(target) || !target.alive) return false;
+          if (!isRocketTarget(target) || !target.alive || (target.type === "boss" && target.hitCooldown > 0)) return false;
           if (!e.freeFlight && target !== e.target) return false;
           const expanded = {
             x: target.x - halfW,
@@ -1509,7 +1594,7 @@
         if (!e.alive && e.target) e.target.rocketTargeted = false;
       }
 
-      if (e.type === "goal" && e.alive && e.x + e.w < p.x + 8) finishLevel();
+      if (e.type === "goal" && e.alive && !state.boss?.alive && e.x + e.w < p.x + 8) finishLevel();
     }
 
     for (const ln of state.links) {
@@ -1762,8 +1847,52 @@
       ctx.rotate(Math.atan2(dy, dx));
       ctx.drawImage(SPR.rocket, -e.w / 2, -e.h / 2, e.w, e.h);
       ctx.restore();
+    } else if (e.type === "boss" && e.alive) {
+      ctx.save();
+      if (bossSheet.complete && bossSheet.naturalWidth) {
+        // The concept art includes a dark aura; the rounded crop keeps it with the creature.
+        ctx.beginPath();
+        ctx.roundRect(e.x - 13, e.y - 15, e.w + 26, e.h + 30, 26);
+        ctx.clip();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          bossSheet, e.config.sheetX, e.config.sheetY, 512, e.config.sheetH,
+          e.x - 13, e.y - 15, e.w + 26, e.h + 30
+        );
+      } else {
+        const fallback = SPR.bugs[1];
+        ctx.drawImage(fallback.image, fallback.sx, fallback.sy, fallback.sw, fallback.sh, e.x, e.y, e.w, e.h);
+      }
+      if (e.hitCooldown > 0 && e.hitCooldown % 6 < 3) {
+        ctx.fillStyle = "rgba(255, 245, 180, 0.35)";
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+      }
+      ctx.restore();
+      ctx.fillStyle = "#071820";
+      ctx.fillRect(e.x + 26, e.y - 22, e.w - 52, 19);
+      ctx.strokeStyle = e.config.color;
+      ctx.strokeRect(e.x + 26.5, e.y - 21.5, e.w - 53, 18);
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "bold 16px 'VT323', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(e.config.name, e.x + e.w / 2, e.y - 7);
+      ctx.textAlign = "left";
+      if (e.warn > 0) {
+        ctx.save();
+        ctx.strokeStyle = e.warn % 8 < 4 ? "#fff0a8" : "#ff8060";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 7]);
+        ctx.beginPath();
+        ctx.moveTo(0, e.shotY + 4);
+        ctx.lineTo(e.x, e.shotY + 4);
+        ctx.stroke();
+        ctx.restore();
+      }
     } else if (e.type === "goal" && e.alive) {
+      ctx.save();
+      if (state.boss?.alive) ctx.globalAlpha = 0.4;
       ctx.drawImage(SPR.gates[e.destination], e.x, e.y, e.w, e.h);
+      ctx.restore();
     }
   }
 
@@ -1841,7 +1970,7 @@
     ctx.strokeStyle = "#66e0ff";
     ctx.strokeRect(pickup.x + 0.5, pickup.y + 0.5, pickup.w, pickup.h);
     for (const e of state.ents) {
-      if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt"].includes(e.type)) continue;
+      if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt", "boss"].includes(e.type)) continue;
       ctx.strokeStyle = e.type === "connector" ? "#7fd7ff" : "#ffe680";
       ctx.strokeRect(e.x + 0.5, e.y + 0.5, e.w, e.h);
     }
@@ -1865,7 +1994,7 @@
     ctx.fillText("L" + (state.level + 1) + " " + L.name, 250, 23);
 
     ctx.fillStyle = "#cde8f5";
-    const maxT = L.shouts ?? 3;
+    const maxT = state.bossActive ? Math.max(3, L.shouts ?? 3) : L.shouts ?? 3;
     ctx.fillText("T x" + state.trabajeen, 600, 23);
     for (let i = 0; i < maxT; i++) {
       ctx.fillStyle = i < state.trabajeen ? "#00a1e0" : "#1a3038";
@@ -1899,6 +2028,23 @@
         10,
         H - 12
       );
+    }
+
+    if (state.bossActive && state.boss?.alive) {
+      const boss = state.boss;
+      ctx.fillStyle = "rgba(4, 16, 24, 0.9)";
+      ctx.fillRect(W / 2 - 160, 41, 320, 52);
+      ctx.strokeStyle = boss.config.color;
+      ctx.strokeRect(W / 2 - 159.5, 41.5, 319, 51);
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "bold 19px 'VT323', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(boss.config.name + " · BOSS", W / 2, 60);
+      ctx.textAlign = "left";
+      for (let i = 0; i < boss.maxHp; i++) {
+        ctx.fillStyle = i < boss.hp ? boss.config.color : "#243442";
+        ctx.fillRect(W / 2 - 138 + i * 94, 69, 86, 13);
+      }
     }
 
     const prog = Math.min(1, state.dist / L.length);
@@ -2020,7 +2166,7 @@
       ctx.fillStyle = "#ffe680";
       ctx.font = "12px 'Press Start 2P', monospace";
       ctx.textAlign = "center";
-      ctx.fillText(state.banner, W / 2, 64);
+      ctx.fillText(state.banner, W / 2, state.bossActive ? 112 : 64);
       ctx.textAlign = "left";
       ctx.globalAlpha = 1;
     }
