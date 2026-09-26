@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1010" viewBox="0 0 1320 1010" role="img" aria-labelledby="title desc">
+  <title id="title">Boss fight and Vesting Surge design overview</title>
+  <desc id="desc">Six pixel-art sea creature boss concepts tagged with integration competitors, followed by the shared fight rules and the conditional endless bonus stage concept.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#102b38"/><stop offset="1" stop-color="#06121b"/></linearGradient>
+    <linearGradient id="water" x2="0" y2="1"><stop stop-color="#123a4a"/><stop offset="1" stop-color="#092430"/></linearGradient>
+    <style>
+      text { font-family: monospace; }
+      .card { fill: #0b202b; stroke: #28556a; stroke-width: 2; }
+      .scene { fill: url(#water); }
+      .small { fill: #9dc2d0; font-size: 13px; }
+      .label { fill: #cde8f5; font-size: 16px; font-weight: bold; }
+      .tag { fill: #071820; stroke: #7fd7ff; stroke-width: 2; }
+      .tagtext { fill: #b9efff; font-size: 12px; font-weight: bold; text-anchor: middle; }
+      .bubble { fill: #77c8d7; opacity: .45; }
+    </style>
+    <symbol id="crab" viewBox="0 0 170 130">
+      <path d="M25 76 7 48 14 43 39 66M145 76l18-28-7-5-25 23" fill="none" stroke="#cf634d" stroke-width="11" stroke-linejoin="miter"/>
+      <path d="M8 45 1 32l17 7M162 45l7-13-17 7" fill="#ef8b55" stroke="#cf634d" stroke-width="4"/>
+      <path d="M42 74 28 103m37-24-11 32m60-37 13 29m-37-24 10 33" stroke="#cf634d" stroke-width="7"/>
+      <path d="M38 50h94v42H38z" fill="#d87553" stroke="#592d35" stroke-width="6"/>
+      <path d="M52 39h27v18H52zm42 0h27v18H94z" fill="#f2a900" stroke="#592d35" stroke-width="5"/>
+      <path d="M61 44h8v8h-8zm42 0h8v8h-8z" fill="#071820"/>
+      <path d="M64 76h42v8H64z" fill="#783d38"/>
+    </symbol>
+    <symbol id="ray" viewBox="0 0 170 130">
+      <path d="M85 38 14 56 4 91 62 78 85 113 108 78 166 91 156 56z" fill="#7c68b0" stroke="#32294e" stroke-width="6"/>
+      <path d="M78 47h14v39H78z" fill="#aa9ce0"/><path d="M81 105h8v20h-8z" fill="#aa9ce0"/>
+      <circle cx="67" cy="64" r="5" fill="#fff0a8"/><circle cx="103" cy="64" r="5" fill="#fff0a8"/>
+      <path d="M68 77h34" stroke="#352842" stroke-width="5"/>
+    </symbol>
+    <symbol id="octopus" viewBox="0 0 170 130">
+      <path d="M44 79q-12 32 4 40t18-23m8-16q-8 33 9 39t19-26m4-14q-2 34 17 36t15-31m0-28q12 30 30 20t-1-31" fill="none" stroke="#d86c89" stroke-width="10"/>
+      <path d="M48 56q0-38 37-42 39 4 39 42v28H48z" fill="#ec819c" stroke="#643b5d" stroke-width="6"/>
+      <circle cx="76" cy="59" r="6" fill="#fff0a8"/><circle cx="105" cy="59" r="6" fill="#fff0a8"/>
+      <path d="M75 72h32" stroke="#643b5d" stroke-width="5"/>
+      <circle cx="60" cy="95" r="3" fill="#ffe3bd"/><circle cx="84" cy="98" r="3" fill="#ffe3bd"/><circle cx="113" cy="94" r="3" fill="#ffe3bd"/>
+    </symbol>
+    <symbol id="eel" viewBox="0 0 170 130">
+      <path d="M23 77q26-44 61-8t62 1q20-4 17-24l-19 10-1-18-15 16q-31 3-50-13-34-23-67 17z" fill="#40a7a6" stroke="#174e59" stroke-width="7"/>
+      <path d="M29 65q34-25 61 4t54 3" fill="none" stroke="#a7e2c9" stroke-width="6"/>
+      <circle cx="38" cy="63" r="6" fill="#fff0a8"/><path d="M16 82 2 92l22 1" fill="#40a7a6" stroke="#174e59" stroke-width="5"/>
+      <path d="M48 46 55 31l11 14m18 4 8-17 10 21m17 7 10-14 7 13" fill="#f0c457" stroke="#174e59" stroke-width="4"/>
+    </symbol>
+    <symbol id="puffer" viewBox="0 0 170 130">
+      <path d="m85 17 9 14 16-10 3 18 19-2-5 18 18 7-12 14 13 13-18 7 4 19-19-1-5 17-16-10-12 14-11-15-17 9-4-18-19 1 5-18-17-7 12-14-12-14 18-7-4-18 19 2 4-18 16 9z" fill="#dcad45" stroke="#70542f" stroke-width="5"/>
+      <circle cx="85" cy="70" r="36" fill="#f3cf69" stroke="#70542f" stroke-width="5"/>
+      <circle cx="72" cy="63" r="5" fill="#071820"/><circle cx="99" cy="63" r="5" fill="#071820"/>
+      <path d="M72 80h28" stroke="#70542f" stroke-width="5"/><path d="M50 89 32 105 58 101m61-12 19 16-26-8" fill="#d38e43" stroke="#70542f" stroke-width="5"/>
+    </symbol>
+    <symbol id="turtle" viewBox="0 0 170 130">
+      <path d="M42 69q4-43 44-48 41 5 44 48l-12 23H54z" fill="#d6a343" stroke="#513d36" stroke-width="7"/>
+      <path d="M59 53 83 29l23 22-21 22zM46 72l26-6 12 28H52zm55-6 28 7-10 22H87z" fill="#82684a" stroke="#513d36" stroke-width="4"/>
+      <path d="M40 77 18 94l7 12 27-13m72-16 22 17-8 12-27-14" fill="#80aa75" stroke="#3c6251" stroke-width="6"/>
+      <path d="M62 94 51 116h23l14-19 14 19h23l-12-22" fill="#80aa75" stroke="#3c6251" stroke-width="5"/>
+      <path d="M78 73h31v26H78z" fill="#80aa75" stroke="#3c6251" stroke-width="5"/><circle cx="86" cy="82" r="4" fill="#fff0a8"/>
+    </symbol>
+    <symbol id="gate" viewBox="0 0 100 120">
+      <path d="M5 118V36Q5 5 50 4q45 1 45 32v82h-15V37Q80 19 50 19T20 37v81z" fill="#d5a83a" stroke="#523f2b" stroke-width="5"/>
+      <path d="M27 118V40q0-14 23-14t23 14v78" fill="#0b2834" stroke="#7fd7ff" stroke-width="4"/>
+      <path d="M39 53h22m-27 14h32m-28 14h24m-21 14h18" stroke="#83d6d0" stroke-width="5"/>
+    </symbol>
+  </defs>
+  <rect width="1320" height="1010" fill="url(#bg)"/>
+  <text x="30" y="42" fill="#f0d060" font-size="25" font-weight="bold">BOSS FIGHTS + VESTING SURGE · DESIGN REVIEW</text>
+  <text x="31" y="69" class="small">Concept overview for approval · compact pixel-art sea creatures · competitor names appear only on in-game tags (no company logos)</text>
+
+  <!-- Six matchup cards -->
+  <g transform="translate(26 92)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">01 · SAP TERRITORY</text>
+    <rect x="12" y="42" width="384" height="150" class="scene"/><path d="M12 167h384v25H12z" fill="#08251f"/>
+    <circle class="bubble" cx="46" cy="96" r="4"/><circle class="bubble" cx="370" cy="76" r="6"/>
+    <use href="#crab" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="263" y="100" width="116" height="31" rx="3"/><text class="tagtext" x="321" y="120">SAP</text>
+    <text x="16" y="218" class="small">Armored crab · broad pincer sweep</text><text x="16" y="237" class="small">Boss learns the existing cannon-lane rhythm</text>
+  </g>
+  <g transform="translate(456 92)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">02 · ANYPOINT STUDIO</text>
+    <rect x="12" y="42" width="384" height="150" fill="#102b42"/><path d="M12 167h384v25H12z" fill="#081b2b"/>
+    <circle class="bubble" cx="53" cy="80" r="5"/><circle class="bubble" cx="366" cy="145" r="4"/>
+    <use href="#ray" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="263" y="100" width="116" height="31" rx="3"/><text class="tagtext" x="321" y="120">BOOMI</text>
+    <text x="16" y="218" class="small">Manta ray · glides between familiar lanes</text><text x="16" y="237" class="small">Readable sweep warning before each pass</text>
+  </g>
+  <g transform="translate(886 92)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">03 · DATAWEAVE CHASM</text>
+    <rect x="12" y="42" width="384" height="150" fill="#102e43"/><path d="M12 167h384v25H12z" fill="#081d27"/>
+    <circle class="bubble" cx="51" cy="143" r="4"/><circle class="bubble" cx="360" cy="82" r="6"/>
+    <use href="#octopus" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="252" y="100" width="127" height="31" rx="3"/><text class="tagtext" x="315" y="120">INFORMATICA</text>
+    <text x="16" y="218" class="small">Octopus · tentacle pattern marks safe gaps</text><text x="16" y="237" class="small">Avoidable with the same swim + dodge controls</text>
+  </g>
+  <g transform="translate(26 360)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">04 · API PLATFORM</text>
+    <rect x="12" y="42" width="384" height="150" fill="#10283c"/><path d="M12 167h384v25H12z" fill="#071a24"/>
+    <circle class="bubble" cx="42" cy="76" r="4"/><circle class="bubble" cx="365" cy="107" r="6"/>
+    <use href="#eel" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="263" y="100" width="116" height="31" rx="3"/><text class="tagtext" x="321" y="120">KONG</text>
+    <text x="16" y="218" class="small">Electric eel · telegraphed horizontal dash</text><text x="16" y="237" class="small">One straight-line attack at a time</text>
+  </g>
+  <g transform="translate(456 360)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">05 · MULE 4 ABYSS</text>
+    <rect x="12" y="42" width="384" height="150" fill="#020d1a"/><path d="M12 167h384v25H12z" fill="#07121e"/>
+    <circle class="bubble" cx="59" cy="119" r="5"/><circle class="bubble" cx="356" cy="70" r="4"/>
+    <use href="#puffer" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="263" y="100" width="116" height="31" rx="3"/><text class="tagtext" x="321" y="120">TIBCO</text>
+    <text x="16" y="218" class="small">Pufferfish · slow, clearly telegraphed bursts</text><text x="16" y="237" class="small">Projectiles reuse the current bolt language</text>
+  </g>
+  <g transform="translate(886 360)">
+    <rect class="card" width="408" height="250" rx="6"/><text x="16" y="28" class="label">06 · IPO CONTROL PLANE</text>
+    <rect x="12" y="42" width="384" height="150" fill="#211a35"/><path d="M12 167h384v25H12z" fill="#100e20"/>
+    <circle class="bubble" cx="50" cy="105" r="4"/><circle class="bubble" cx="363" cy="141" r="6"/>
+    <use href="#turtle" x="102" y="53" width="166" height="132"/>
+    <rect class="tag" x="263" y="100" width="116" height="31" rx="3"/><text class="tagtext" x="321" y="120">ORACLE</text>
+    <text x="16" y="218" class="small">Vault turtle · guarded phases, then open target</text><text x="16" y="237" class="small">Final boss gets the same simple hit feedback</text>
+  </g>
+
+  <!-- Shared rules -->
+  <g transform="translate(26 628)">
+    <rect class="card" width="604" height="190" rx="6"/>
+    <text x="18" y="30" fill="#f0d060" font-size="17" font-weight="bold">SHARED BOSS RULES · KEEP THE GAME FAMILIAR</text>
+    <text x="20" y="62" class="small">• Same swim / flap movement; no new combat buttons.</text>
+    <text x="20" y="88" class="small">• Boss appears after the level's regular hazards; 3 clear hits to win.</text>
+    <text x="20" y="114" class="small">• T fires the existing squad rockets; boss has a visible 3-pip health bar.</text>
+    <text x="20" y="140" class="small">• Every attack gets a brief visual warning and a safe dodge lane.</text>
+    <text x="20" y="166" class="small">• Defeat opens the normal level gate; no separate arena transition.</text>
+  </g>
+  <g transform="translate(648 628)">
+    <rect class="card" width="646" height="190" rx="6"/>
+    <text x="18" y="30" fill="#f0d060" font-size="17" font-weight="bold">OPTIONAL FINAL STAGE · CRM VESTING SURGE</text>
+    <rect x="18" y="47" width="272" height="112" fill="#081a28" stroke="#28556a"/>
+    <path d="M27 145 64 132 91 138 120 104 148 116 184 81 214 89 274 58" fill="none" stroke="#5ee6aa" stroke-width="5"/>
+    <path d="M24 151h252M25 59v92" stroke="#365264" stroke-width="2"/>
+    <text x="314" y="66" class="small">Unlock only after all connectors</text>
+    <text x="314" y="90" class="small">in the six regular levels are linked.</text>
+    <text x="314" y="118" class="small">Endless columns accelerate over time;</text>
+    <text x="314" y="142" class="small">survival seconds build a score multiplier.</text>
+    <text x="314" y="166" class="small">CRM stock-chart background rises behind play.</text>
+  </g>
+  <text x="28" y="867" fill="#7fd7ff" font-size="16" font-weight="bold">APPROVAL CHECKPOINT</text>
+  <text x="28" y="896" class="small">Please review: competitor-to-level matchups, sea-creature choices, 3-hit boss difficulty, and the shared attack style.</text>
+  <text x="28" y="923" class="small">This is a concept sheet, not final production sprite art. Boss sizes, colors, and tag styling can still change.</text>
+  <text x="28" y="967" fill="#9dc2d0" font-size="12">Proposal maps themes to SAP · Boomi · Informatica · Kong · TIBCO · Oracle. Brand names are text tags only; creature illustrations are original concepts.</text>
+</svg>
