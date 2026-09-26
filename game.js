@@ -1117,6 +1117,25 @@
 
     state.squad.forEach((s) => { s.fire = 22; });
 
+    if (state.bossActive) {
+      for (const shooter of state.squad) {
+        if (shooter.x < -24 || shooter.x > W) continue;
+        state.ents.push({
+          type: "rocket",
+          x: shooter.x + 30,
+          y: shooter.y + 20,
+          w: 22,
+          h: 10,
+          vx: 7.2,
+          vy: 0,
+          freeFlight: true,
+          life: 180,
+          alive: true
+        });
+      }
+      return;
+    }
+
     const px = state.player.x + state.player.w / 2;
     const py = state.player.y + state.player.h / 2;
     const foes = state.ents.filter((e) => {
@@ -1727,6 +1746,7 @@
         const halfH = e.h / 2;
         const sweptFoes = state.ents.filter((target) => {
           if (!isRocketTarget(target) || !target.alive || (target.type === "boss" && target.hitCooldown > 0)) return false;
+          if (state.bossActive && target.type === "bolt" && target.bossShot) return false;
           if (!e.freeFlight && target !== e.target) return false;
           const expanded = {
             x: target.x - halfW,
