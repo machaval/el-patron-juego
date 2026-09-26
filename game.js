@@ -1392,7 +1392,7 @@
       else state.mode = "win";
       return;
     }
-    state.transitionTimer = 90;
+    state.transitionTimer = 45;
     state.mode = "level-transition";
   }
 
@@ -1748,7 +1748,11 @@
         if (!e.alive && e.target) e.target.rocketTargeted = false;
       }
 
-      if (e.type === "goal" && e.alive && !state.boss?.alive && e.x + e.w < p.x + 8) finishLevel();
+      if (e.type === "goal" && e.alive && !state.boss?.alive && e.x + e.w / 2 <= p.x + p.w / 2) {
+        e.alive = false;
+        finishLevel();
+        return;
+      }
     }
 
     for (const ln of state.links) {
