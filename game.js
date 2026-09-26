@@ -605,7 +605,7 @@
     },
     {
       name: "ANYPOINT STUDIO",
-      sub: "Hit every ball. Miss = damage. T kills a shark.",
+      sub: "Link connectors for bonus vesting. T clears nearby threats.",
       sky: ["#102030", "#1a3850", "#081018"],
       accent: "#00a1e0",
       length: 4600,
@@ -623,7 +623,7 @@
     },
     {
       name: "DATAWEAVE CHASM",
-      sub: "Squad of 2. Trabajeen clears 6.",
+      sub: "Squad of 2. T launches homing rockets at up to 6 threats.",
       sky: ["#061828", "#123050", "#081018"],
       accent: "#c4b070",
       length: 5000,
@@ -828,10 +828,12 @@
     needLink: 0,
     banner: null,
     bannerLife: 0,
+    levelIntroLife: 0,
     winTimer: 0,
     checkpoint: 0,
     runSeed: 0,
-    devRun: false
+    devRun: false,
+    perfectLinkRun: false
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -900,6 +902,7 @@
     state.invuln = 40;
     state.winTimer = 0;
     state.finishing = false;
+    state.levelIntroLife = 150;
     state.hurtTimer = 0;
     state.player.x = 170;
     state.player.y = H / 2;
@@ -1104,7 +1107,7 @@
     if (n) audio.boom();
   }
 
-  function damage() {
+  function damage(reason = "HAZARD") {
     if (state.invuln > 0) return;
     state.health--;
     state.invuln = 70;
@@ -1112,6 +1115,7 @@
     state.damageFlash = 10;
     state.shakeLife = reducedMotion ? 0 : 10;
     state.shakeDuration = 10;
+    banner("HIT: " + reason);
     audio.hit();
     burst(state.player.x + 30, state.player.y + 16, "#ff6080", 12);
     if (state.health <= 0) {
@@ -1153,6 +1157,9 @@
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
     state.devRun = Boolean(options.devRun);
+    state.perfectLinkRun = !state.devRun && (retryingAfterDeath
+      ? state.perfectLinkRun
+      : !fromCheckpoint && options.startLevel === undefined);
     if (!state.devRun) DEV.godMode = false;
     state.score = 0;
     state.health = state.maxHealth;
@@ -1281,7 +1288,7 @@
     p.vy += L.gravity;
     p.y += p.vy;
     if (p.y < 36) { p.y = 36; p.vy = 0; }
-    if (p.y > H - 56) { p.y = H - 56; damage(); p.vy = -3; }
+    if (p.y > H - 56) { p.y = H - 56; damage("SEA FLOOR"); p.vy = -3; }
 
     state.dist += L.speed;
     const distanceVested = Math.min(Math.floor(state.dist / VESTING_DISTANCE_STEP), Math.floor(L.length / VESTING_DISTANCE_STEP));
@@ -1295,6 +1302,7 @@
     if (state.invuln > 0) state.invuln--;
     if (state.hurtTimer > 0) state.hurtTimer--;
     if (state.bannerLife > 0) state.bannerLife--;
+    if (state.levelIntroLife > 0) state.levelIntroLife--;
     if (state.shakeLife > 0) state.shakeLife--;
     if (state.damageFlash > 0) state.damageFlash--;
     for (const effect of state.effects) {
@@ -1370,22 +1378,22 @@
         e.x -= e.vx;
         e.y += e.vy;
         if (e.y < 50 || e.y > H - 70) e.vy *= -1;
-        if (aabb(hitbox, e)) damage();
+        if (aabb(hitbox, e)) damage("SHARK");
       }
 
       if (e.type === "bug" && e.alive) {
         e.y += e.vy;
         if (e.y < 50 || e.y > H - 70) e.vy *= -1;
-        if (aabb(hitbox, e)) damage();
+        if (aabb(hitbox, e)) damage("SEA CREATURE");
       }
 
-      if (e.type === "cannon" && e.alive && aabb(hitbox, e)) damage();
+      if (e.type === "cannon" && e.alive && aabb(hitbox, e)) damage("CANNON");
 
       if (e.type === "bolt" && e.alive) {
         e.x += e.vx;
         e.y += e.vy;
         e.renderVx = e.vx - scroll;
-        if (aabb(hitbox, e)) { e.alive = false; damage(); }
+        if (aabb(hitbox, e)) { e.alive = false; damage("CANNON SHOT"); }
         if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
       }
 
@@ -1412,9 +1420,10 @@
 
       if (e.type === "connector" && !e.linked && !e.missed && e.x + e.w < connectorPickup.x) {
         e.missed = true;
-        damage();
+        state.perfectLinkRun = false;
+        banner("MISSED CONNECTOR · LINK BONUS LOST");
+        damage("MISSED CONNECTOR");
         burst(e.x + CONNECTOR_CENTER, e.y + CONNECTOR_CENTER, "#ff6080", 8);
-        banner("MISSED CONNECTOR");
       }
 
       if (e.type === "rocket") {
@@ -1432,7 +1441,7 @@
         if (e.life <= 0) e.alive = false;
       }
 
-      if (e.type === "goal" && aabb(hitbox, e)) finishLevel();
+      if (e.type === "goal" && e.alive && e.x + e.w < p.x + 8) finishLevel();
     }
 
     for (const ln of state.links) {
@@ -1440,7 +1449,6 @@
       ln.bx -= scroll;
     }
 
-    if (state.dist > L.length + 40) finishLevel();
   }
 
   function drawBg() {
@@ -1817,7 +1825,12 @@
     if (L.connectors) {
       ctx.fillStyle = "#7fd7ff";
       ctx.font = "16px 'VT323', monospace";
-      ctx.fillText("LINKS " + state.linked + "/" + state.needLink, 10, H - 12);
+      ctx.fillText(
+        "LINKS " + state.linked + "/" + state.needLink +
+        " · OPTIONAL · +$80 EACH AT GATE",
+        10,
+        H - 12
+      );
     }
 
     const prog = Math.min(1, state.dist / L.length);
@@ -1944,6 +1957,16 @@
       ctx.globalAlpha = 1;
     }
 
+    if (state.levelIntroLife > 0) {
+      ctx.globalAlpha = Math.min(1, state.levelIntroLife / 24);
+      ctx.fillStyle = "#e4f3f8";
+      ctx.font = "20px 'VT323', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(LEVELS[state.level].sub, W / 2, 91);
+      ctx.textAlign = "left";
+      ctx.globalAlpha = 1;
+    }
+
     drawHud();
     ctx.restore();
 
@@ -1967,7 +1990,9 @@
     ctx.font = "30px 'VT323', monospace";
     ctx.fillText("Vested +$" + state.transitionReward, W / 2, H / 2 + 8);
     ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Next: " + LEVELS[state.level + 1].name, W / 2, H / 2 + 40);
+    ctx.fillText("Includes +$80 per linked connector", W / 2, H / 2 + 36);
+    ctx.font = "22px 'VT323', monospace";
+    ctx.fillText("Next: " + LEVELS[state.level + 1].name, W / 2, H / 2 + 64);
     ctx.textAlign = "left";
   }
 
@@ -1980,7 +2005,11 @@
     ctx.fillText("PAUSED", W / 2, H / 2 - 8);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "24px 'VT323', monospace";
-    ctx.fillText("Press P / ESC or tap RESUME", W / 2, H / 2 + 28);
+    ctx.fillText("LEVEL " + (state.level + 1) + " · " + LEVELS[state.level].name, W / 2, H / 2 + 22);
+    ctx.font = "18px 'VT323', monospace";
+    ctx.fillText(LEVELS[state.level].sub, W / 2, H / 2 + 46);
+    ctx.font = "24px 'VT323', monospace";
+    ctx.fillText("Press P / ESC or tap RESUME", W / 2, H / 2 + 72);
     ctx.textAlign = "left";
   }
 
