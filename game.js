@@ -14,6 +14,7 @@
     mute: document.getElementById("mute-button"),
     effects: document.getElementById("effects-button"),
     continue: document.getElementById("continue-button"),
+    replay: document.getElementById("replay-button"),
     reset: document.getElementById("reset-button")
   };
 
@@ -52,6 +53,7 @@
   bindPressButton(buttons.mute, "KeyM");
   bindPressButton(buttons.effects, "KeyR");
   bindPressButton(buttons.continue, "KeyC");
+  bindPressButton(buttons.replay, "KeyS");
   if (buttons.reset) buttons.reset.addEventListener("click", resetSavedProgress);
 
   function updateControlLabels() {
@@ -77,6 +79,7 @@
       buttons.continue.textContent = "CONTINUE L" + (savedProgress.highestUnlockedLevel + 1);
       buttons.continue.hidden = state.mode !== "title" || savedProgress.highestUnlockedLevel === 0;
     }
+    if (buttons.replay) buttons.replay.hidden = state.mode !== "title" || !savedProgress.lastRunSeed;
     if (buttons.reset) buttons.reset.hidden = state.mode !== "title";
     document.getElementById("controls")?.classList.toggle("title-mode", state.mode === "title");
   }
@@ -708,7 +711,7 @@
   const motionPreference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 
   function defaultSavedProgress() {
-    return { version: 1, bestVested: 0, highestUnlockedLevel: 0, muted: false, reducedEffects: null };
+    return { version: 1, bestVested: 0, highestUnlockedLevel: 0, bestBonusSeconds: 0, lastRunSeed: 0, muted: false, reducedEffects: null };
   }
 
   function readSavedProgress() {
@@ -723,6 +726,8 @@
         highestUnlockedLevel: Number.isFinite(parsed.highestUnlockedLevel)
           ? Math.max(0, Math.min(LEVELS.length - 1, Math.floor(parsed.highestUnlockedLevel)))
           : 0,
+        bestBonusSeconds: Number.isFinite(parsed.bestBonusSeconds) ? Math.max(0, Math.floor(parsed.bestBonusSeconds)) : 0,
+        lastRunSeed: Number.isFinite(parsed.lastRunSeed) ? parsed.lastRunSeed >>> 0 : 0,
         muted: typeof parsed.muted === "boolean" ? parsed.muted : false,
         reducedEffects: typeof parsed.reducedEffects === "boolean" ? parsed.reducedEffects : null
       };
@@ -746,7 +751,7 @@
 
   function resetSavedProgress() {
     if (state.mode !== "title") return;
-    const confirmed = window.confirm("Reset the best score, unlocked levels, mute, and effects settings?");
+    const confirmed = window.confirm("Reset the best score, bonus record, run seed, unlocked levels, mute, and effects settings?");
     if (!confirmed) return;
     savedProgress = defaultSavedProgress();
     try {
@@ -1063,7 +1068,7 @@
       const config = BOSSES[state.level];
       state.boss = {
         type: "boss", config,
-        x: L.length - 660, y: H / 2 - config.h / 2, w: config.w, h: config.h,
+        x: L.length - 350, y: H / 2 - config.h / 2, w: config.w, h: config.h,
         vy: config.vy, hp: 3, maxHp: 3, attackTimer: 100,
         warn: 0, hitCooldown: 0, alive: true
       };
@@ -1159,7 +1164,7 @@
         h: 10,
         target: e,
         freeFlight: false,
-        life: 90,
+        life: 160,
         alive: true
       });
     }
@@ -1213,7 +1218,9 @@
   function updateBoss(boss, playerHitbox) {
     if (!state.bossActive) return;
     state.bossTime++;
-    if (state.bossTime % 240 === 0) state.trabajeen = Math.min(3, state.trabajeen + 1);
+    if (state.bossTime % 240 === 0) {
+      state.trabajeen = Math.min(Math.max(3, LEVELS[state.level].shouts ?? 3), state.trabajeen + 1);
+    }
     if (boss.hitCooldown > 0) boss.hitCooldown--;
     boss.y += boss.vy;
     if (boss.y < 95 || boss.y + boss.h > H - 65) boss.vy *= -1;
@@ -1299,7 +1306,10 @@
     state.vested = state.bonusBaseVested + bonus;
     state.bonusEnded = true;
     state.mode = "win";
-    if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+    if (!state.devRun) persistSavedProgress({
+      bestVested: Math.max(savedProgress.bestVested, state.vested),
+      bestBonusSeconds: Math.max(savedProgress.bestBonusSeconds, state.bonusSeconds)
+    });
     updateControlLabels();
   }
 
@@ -1373,6 +1383,7 @@
     state.mode = "play";
     state.runSeed = runSeed ?? createRunSeed();
     state.devRun = Boolean(options.devRun);
+    if (!state.devRun) persistSavedProgress({ lastRunSeed: state.runSeed });
     state.bonusEnded = false;
     state.perfectLinkRun = !state.devRun && (retryingAfterDeath
       ? state.perfectLinkRun
@@ -1452,6 +1463,13 @@
     }
 
     if (state.mode === "title") {
+      if (KEY.KeyS) {
+        KEY.KeyS = false;
+        if (!savedProgress.lastRunSeed) return;
+        KEY.Enter = KEY.Space = KEY.Pointer = false;
+        startGame(false, undefined, savedProgress.lastRunSeed);
+        return;
+      }
       if (KEY.KeyC) {
         KEY.KeyC = false;
         if (savedProgress.highestUnlockedLevel <= 0) return;
@@ -1470,7 +1488,10 @@
         KEY.Enter = KEY.Space = KEY.Pointer = false;
         if (state.devRun && state.bonusEnded) startBonus(true);
         else if (state.devRun) startGame(false, undefined, state.runSeed, { devRun: true, startLevel: state.level });
-        else startGame(state.mode === "dead" && state.checkpoint > 0, state.checkpoint, state.runSeed);
+        else {
+          const retrying = state.mode === "dead";
+          startGame(retrying && state.checkpoint > 0, state.checkpoint, retrying ? state.runSeed : undefined);
+        }
       }
       return;
     }
@@ -2112,7 +2133,7 @@
     ctx.fillText("L" + (state.level + 1) + " " + L.name, 250, 23);
 
     ctx.fillStyle = "#cde8f5";
-    const maxT = state.bossActive ? Math.max(3, L.shouts ?? 3) : L.shouts ?? 3;
+    const maxT = Math.min(4, state.bossActive ? Math.max(3, L.shouts ?? 3) : L.shouts ?? 3);
     ctx.fillText("T x" + state.trabajeen, 600, 23);
     for (let i = 0; i < maxT; i++) {
       ctx.fillStyle = i < state.trabajeen ? "#00a1e0" : "#1a3038";
@@ -2326,19 +2347,21 @@
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
     const drift = reducedMotion ? 0 : state.bonusTicks * 0.8;
-    const rise = Math.min(135, state.bonusTicks * 0.025);
+    const rise = (state.bonusTicks * 0.025) % 260;
     for (let layer = 0; layer < 2; layer++) {
-      ctx.beginPath();
-      for (let x = 0; x <= W; x += 8) {
-        const wave = Math.sin((x + drift * (layer ? 0.55 : 1)) * 0.023) * 12 +
-          Math.sin((x + drift * (layer ? 0.35 : 0.8)) * 0.063) * 6;
-        const y = H - 80 - x * (layer ? 0.13 : 0.19) - rise + wave - layer * 62;
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      for (let repeat = -2; repeat <= 2; repeat++) {
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 8) {
+          const wave = Math.sin((x + drift * (layer ? 0.55 : 1)) * 0.023) * 12 +
+            Math.sin((x + drift * (layer ? 0.35 : 0.8)) * 0.063) * 6;
+          const y = H - 80 - x * (layer ? 0.13 : 0.19) - rise + wave - layer * 62 + repeat * 260;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = layer ? "rgba(111, 215, 255, 0.12)" : "rgba(90, 232, 158, 0.42)";
+        ctx.lineWidth = layer ? 2 : 3;
+        ctx.stroke();
       }
-      ctx.strokeStyle = layer ? "rgba(111, 215, 255, 0.25)" : "rgba(90, 232, 158, 0.68)";
-      ctx.lineWidth = layer ? 2 : 4;
-      ctx.stroke();
     }
     ctx.fillStyle = "rgba(4, 18, 28, 0.5)";
     ctx.fillRect(0, H - 34, W, 34);
@@ -2482,16 +2505,18 @@
     }
     ctx.fillStyle = "#7fb4c8";
     ctx.font = "20px 'VT323', monospace";
-    ctx.fillText("BEST VESTED: $" + savedProgress.bestVested + "   ·   X: RESET SAVED DATA", W / 2, 454);
+    ctx.fillText("BEST VESTED: $" + savedProgress.bestVested + "   ·   BEST SURGE: " + savedProgress.bestBonusSeconds + "s   ·   X: RESET", W / 2, 454);
+    if (savedProgress.lastRunSeed) ctx.fillText("S: REPLAY LAST SEED " + savedProgress.lastRunSeed, W / 2, 478);
     if (DEV.enabled) {
       ctx.fillStyle = "#71dfaa";
-      ctx.fillText("DEV MODE: F2 FOR LEVEL SELECT + GOD MODE", W / 2, 482);
+      ctx.fillText("DEV MODE: F2 FOR LEVEL SELECT + GOD MODE", W / 2, 506);
     }
     ctx.textAlign = "left";
   }
 
   function drawEnd(win) {
-    drawPlay();
+    if (state.bonusEnded) drawBonus();
+    else drawPlay();
     ctx.fillStyle = "rgba(0,0,0,0.62)";
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = "center";
@@ -2500,13 +2525,14 @@
     ctx.fillText(win ? (state.bonusEnded ? "CRM VESTING SURGE" : "SAP CONQUERED · IPO") : "RUNTIME CRASH", W / 2, 220);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "28px 'VT323', monospace";
-    ctx.fillText("Vested options: $" + state.vested, W / 2, 270);
+    ctx.fillText("Vested options: $" + state.vested, W / 2, 266);
     if (state.bonusEnded) {
-      ctx.fillText(state.bonusSeconds + "s survived · x" + state.bonusMultiplier.toFixed(1) + " multiplier", W / 2, 292);
+      ctx.fillText("Base $" + state.bonusBaseVested + " + bonus $" + (state.vested - state.bonusBaseVested), W / 2, 295);
+      ctx.fillText(state.bonusSeconds + "s survived · x" + state.bonusMultiplier.toFixed(1) + " multiplier", W / 2, 324);
     }
-    ctx.fillText(state.checkpoint > 0 && !win ? "ENTER resume from L" + (state.checkpoint + 1) : "ENTER to dive again", W / 2, 314);
+    ctx.fillText(state.checkpoint > 0 && !win ? "ENTER resume from L" + (state.checkpoint + 1) : "ENTER to dive again", W / 2, state.bonusEnded ? 365 : 314);
     ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Run seed: " + state.runSeed, W / 2, 348);
+    ctx.fillText("Run seed: " + state.runSeed, W / 2, state.bonusEnded ? 396 : 348);
     ctx.textAlign = "left";
   }
 
