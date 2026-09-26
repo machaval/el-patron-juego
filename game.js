@@ -860,6 +860,9 @@
     bonusBaseVested: 0,
     bonusSpeed: 4,
     bonusRandom: null,
+    bonusChartRandom: null,
+    bonusChartCandles: [],
+    bonusChartPrice: 100,
     bonusEnded: false,
     pausedFrom: "play"
   };
@@ -1284,6 +1287,10 @@
     state.bonusMultiplier = 1;
     state.bonusSpeed = 4;
     state.bonusRandom = createSeededRandom(state.runSeed ^ 0x43524d);
+    state.bonusChartRandom = createSeededRandom(state.runSeed ^ 0x53544f43);
+    state.bonusChartCandles = [];
+    state.bonusChartPrice = 100;
+    for (let i = 0; i < 48; i++) appendBonusChartCandle();
     state.health = state.maxHealth;
     state.invuln = 70;
     state.boss = null;
@@ -1321,9 +1328,21 @@
     state.ents.push({ type: "cannon", bonusColumn: true, side: "bot", x, y: gy + gap, w: 46, h: H - gy - gap, alive: true });
   }
 
+  function appendBonusChartCandle() {
+    const random = state.bonusChartRandom || Math.random;
+    const open = state.bonusChartPrice;
+    const close = Math.max(78, open + (random() - 0.47) * 3.6);
+    const high = Math.max(open, close) + random() * 1.25;
+    const low = Math.min(open, close) - random() * 1.25;
+    state.bonusChartPrice = close;
+    state.bonusChartCandles.push({ open, close, high, low, volume: 0.25 + random() * 0.75 });
+    if (state.bonusChartCandles.length > 48) state.bonusChartCandles.shift();
+  }
+
   function updateBonus() {
     state.t++;
     state.bonusTicks++;
+    if (state.bonusTicks % 12 === 0) appendBonusChartCandle();
     if (state.bonusTicks % 60 === 0) {
       state.bonusSeconds++;
       state.bonusMultiplier = Math.round((1 + state.bonusSeconds * 0.1) * 10) / 10;
@@ -2331,41 +2350,129 @@
 
   function drawBonusBg() {
     const gradient = ctx.createLinearGradient(0, 0, 0, H);
-    gradient.addColorStop(0, "#10283a");
-    gradient.addColorStop(0.55, "#123445");
-    gradient.addColorStop(1, "#061825");
+    gradient.addColorStop(0, "#102634");
+    gradient.addColorStop(0.58, "#102d38");
+    gradient.addColorStop(1, "#071a25");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "rgba(111, 193, 211, 0.12)";
+
+    const plot = { left: 42, right: 878, top: 102, bottom: 424 };
+    const candles = state.bonusChartCandles;
+    const visible = candles.slice(-38);
+    let minPrice = Math.min(...visible.map((candle) => candle.low));
+    let maxPrice = Math.max(...visible.map((candle) => candle.high));
+    const pad = Math.max(2, (maxPrice - minPrice) * 0.1);
+    minPrice -= pad;
+    maxPrice += pad;
+    const priceY = (price) => plot.bottom - ((price - minPrice) / (maxPrice - minPrice)) * (plot.bottom - plot.top);
+
+    ctx.fillStyle = "rgba(2, 13, 22, 0.2)";
+    ctx.fillRect(plot.left, plot.top, plot.right - plot.left, plot.bottom - plot.top);
+    ctx.strokeStyle = "rgba(130, 183, 194, 0.12)";
     ctx.lineWidth = 1;
-    for (let x = -((reducedMotion ? 0 : state.bonusTicks * 0.35) % 80); x < W; x += 80) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    for (let i = 0; i <= 4; i++) {
+      const y = plot.top + (plot.bottom - plot.top) * i / 4;
+      ctx.beginPath(); ctx.moveTo(plot.left, y); ctx.lineTo(plot.right, y); ctx.stroke();
     }
-    for (let y = 60; y < H; y += 60) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    const step = 24;
+    const scroll = reducedMotion ? 0 : ((state.bonusTicks % 12) / 12) * step;
+    for (let i = 0; i <= 7; i++) {
+      const x = plot.left + i * 120 - (reducedMotion ? 0 : scroll * 5);
+      ctx.beginPath(); ctx.moveTo(x, plot.top); ctx.lineTo(x, 494); ctx.stroke();
     }
-    const drift = reducedMotion ? 0 : state.bonusTicks * 0.8;
-    const rise = (state.bonusTicks * 0.025) % 260;
-    for (let layer = 0; layer < 2; layer++) {
-      for (let repeat = -2; repeat <= 2; repeat++) {
-        ctx.beginPath();
-        for (let x = 0; x <= W; x += 8) {
-          const wave = Math.sin((x + drift * (layer ? 0.55 : 1)) * 0.023) * 12 +
-            Math.sin((x + drift * (layer ? 0.35 : 0.8)) * 0.063) * 6;
-          const y = H - 80 - x * (layer ? 0.13 : 0.19) - rise + wave - layer * 62 + repeat * 260;
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = layer ? "rgba(111, 215, 255, 0.12)" : "rgba(90, 232, 158, 0.42)";
-        ctx.lineWidth = layer ? 2 : 3;
-        ctx.stroke();
-      }
+    ctx.fillStyle = "rgba(3, 14, 22, 0.72)";
+    ctx.fillRect(plot.right + 1, plot.top, W - plot.right - 1, 392);
+
+    ctx.save();
+    ctx.globalAlpha = 0.68;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    visible.forEach((candle, index) => {
+      const x = plot.right - (visible.length - index) * step - scroll + step / 2;
+      const average = visible.slice(Math.max(0, index - 6), index + 1)
+        .reduce((sum, item) => sum + item.close, 0) / Math.min(index + 1, 7);
+      if (index === 0) ctx.moveTo(x, priceY(average));
+      else ctx.lineTo(x, priceY(average));
+    });
+    ctx.strokeStyle = "#65bde0";
+    ctx.stroke();
+
+    visible.forEach((candle, index) => {
+      const x = plot.right - (visible.length - index) * step - scroll + 3;
+      const center = x + 7;
+      const rising = candle.close >= candle.open;
+      const color = rising ? "#54d68a" : "#ef6a69";
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(center, priceY(candle.high));
+      ctx.lineTo(center, priceY(candle.low));
+      ctx.stroke();
+      const bodyTop = priceY(Math.max(candle.open, candle.close));
+      const bodyBottom = priceY(Math.min(candle.open, candle.close));
+      ctx.fillRect(x, bodyTop, 14, Math.max(3, bodyBottom - bodyTop));
+      const volumeHeight = candle.volume * 31;
+      ctx.globalAlpha = 0.26;
+      ctx.fillRect(x + 2, 492 - volumeHeight, 10, volumeHeight);
+      ctx.globalAlpha = 0.68;
+    });
+
+    const lastCandle = visible[visible.length - 1];
+    if (lastCandle) {
+      const activeClose = lastCandle.close + Math.sin(state.bonusTicks * 0.31) * 0.7;
+      const activeX = plot.right - scroll + 3;
+      const activeColor = activeClose >= lastCandle.close ? "#54d68a" : "#ef6a69";
+      ctx.strokeStyle = activeColor;
+      ctx.fillStyle = activeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(activeX + 7, priceY(Math.max(activeClose, lastCandle.close) + 0.8));
+      ctx.lineTo(activeX + 7, priceY(Math.min(activeClose, lastCandle.close) - 0.8));
+      ctx.stroke();
+      ctx.fillRect(activeX, priceY(Math.max(activeClose, lastCandle.close)), 14,
+        Math.max(3, Math.abs(priceY(activeClose) - priceY(lastCandle.close))));
+
+      const markerY = priceY(activeClose);
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "rgba(244, 218, 119, 0.6)";
+      ctx.beginPath(); ctx.moveTo(plot.left, markerY); ctx.lineTo(plot.right, markerY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#f4da77";
+      ctx.fillRect(plot.right + 7, markerY - 10, 68, 20);
+      ctx.fillStyle = "#17242a";
+      ctx.font = "15px 'VT323', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("$" + activeClose.toFixed(2), plot.right + 41, markerY + 4);
+      ctx.textAlign = "left";
     }
-    ctx.fillStyle = "rgba(4, 18, 28, 0.5)";
-    ctx.fillRect(0, H - 34, W, 34);
-    ctx.fillStyle = "#60dfa0";
-    ctx.font = "18px 'VT323', monospace";
-    ctx.fillText("CRM ▲", W - 84, H - 12);
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(220, 237, 232, 0.52)";
+    ctx.font = "15px 'VT323', monospace";
+    ctx.textAlign = "right";
+    for (let i = 0; i <= 4; i++) {
+      const value = maxPrice - (maxPrice - minPrice) * i / 4;
+      ctx.fillText("$" + value.toFixed(0), W - 5, plot.top + (plot.bottom - plot.top) * i / 4 + 4);
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(4, 18, 27, 0.66)";
+    ctx.fillRect(0, 58, 200, 34);
+    ctx.fillStyle = "#dce9e8";
+    ctx.font = "17px 'VT323', monospace";
+    ctx.fillText("CRM · SIMULATED MARKET", 12, 73);
+    ctx.fillStyle = "#64dd91";
+    ctx.fillRect(13, 80, 5, 5);
+    ctx.font = "13px 'VT323', monospace";
+    ctx.fillStyle = "#9cb8b8";
+    ctx.fillText("LIVE FEED  ·  VOL", 24, 86);
+    ctx.fillStyle = "rgba(4, 18, 28, 0.46)";
+    ctx.fillRect(0, 430, W, 70);
+    ctx.fillStyle = "rgba(127, 184, 194, 0.12)";
+    ctx.fillRect(plot.left, 430, plot.right - plot.left, 1);
+    ctx.fillStyle = "#9cb8b8";
+    ctx.font = "14px 'VT323', monospace";
+    ctx.fillText("VOLUME", 12, 486);
   }
 
   function drawBonus() {
