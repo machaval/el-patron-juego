@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#05141d" />
+  <meta name="description" content="El Patrón: The Vesting Horizon — a six-stage underwater arcade run." />
   <title>El Patrón · The Vesting Horizon</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -10,22 +12,44 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div id="frame">
-    <canvas id="game" width="960" height="540"></canvas>
-    <div id="scanlines"></div>
-  </div>
-  <p id="orientation-hint">Rotate to landscape for readable game text and boss health bars.</p>
-  <div id="controls" aria-label="Game controls">
-    <button id="flap-button" type="button" aria-label="Flap">FLAP</button>
-    <button id="shout-button" type="button" aria-label="Use Trabajeen">TRABAJEEEN</button>
-    <button id="pause-button" type="button" aria-label="Pause game">PAUSE</button>
-    <button id="mute-button" type="button" aria-label="Mute sound">MUTE</button>
-    <button id="effects-button" type="button" aria-label="Reduce visual effects">LESS FX</button>
-    <button id="continue-button" type="button" aria-label="Continue from unlocked level" hidden>CONTINUE</button>
-    <button id="replay-button" type="button" aria-label="Replay last run seed" hidden>REPLAY SEED</button>
-    <button id="reset-button" type="button" aria-label="Reset saved progress" hidden>RESET</button>
-  </div>
-  <p id="hint">SPACE / CLICK flap · T Trabajeen! · P pause · M mute · R effects · C continue · S replay seed · X reset</p>
+  <main id="app-shell">
+    <header id="topbar">
+      <div class="brand-lockup" aria-label="El Patrón: The Vesting Horizon">
+        <span class="brand-mark" aria-hidden="true">EP</span>
+        <span class="brand-copy"><strong>EL PATRÓN</strong><small>THE VESTING HORIZON</small></span>
+      </div>
+      <div class="session-status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="session-label">READY TO DIVE</span>
+        <span id="level-label">6 MISSIONS</span>
+      </div>
+    </header>
+
+    <div id="frame">
+      <canvas id="game" width="960" height="540" tabindex="0" aria-label="El Patrón game. Press Space or click to begin.">
+        Your browser does not support the canvas element required to play El Patrón.
+      </canvas>
+      <div id="scanlines" aria-hidden="true"></div>
+      <i class="frame-corner frame-corner--tl" aria-hidden="true"></i>
+      <i class="frame-corner frame-corner--br" aria-hidden="true"></i>
+    </div>
+
+    <p id="orientation-hint">Rotate to landscape for readable game text and boss health bars.</p>
+    <div id="controls" aria-label="Game controls">
+      <button id="flap-button" class="control-primary" type="button" aria-label="Flap">FLAP</button>
+      <button id="shout-button" class="control-power" type="button" aria-label="Use Trabajeen">TRABAJEEEN</button>
+      <button id="pause-button" type="button" aria-label="Pause game">PAUSE</button>
+      <button id="mute-button" type="button" aria-label="Mute sound" aria-pressed="false">MUTE</button>
+      <button id="effects-button" type="button" aria-label="Reduce visual effects" aria-pressed="false">LESS FX</button>
+      <button id="continue-button" class="control-primary" type="button" aria-label="Continue from unlocked level" hidden>CONTINUE</button>
+      <button id="replay-button" type="button" aria-label="Replay last run seed" hidden>REPLAY SEED</button>
+      <button id="reset-button" class="control-danger" type="button" aria-label="Reset saved progress" hidden>RESET</button>
+    </div>
+    <footer id="hint">
+      <span><kbd>SPACE</kbd> FLAP</span><span><kbd>T</kbd> TRABAJEEEN</span>
+      <span><kbd>P</kbd> PAUSE</span><span><kbd>M</kbd> SOUND</span><span><kbd>R</kbd> EFFECTS</span>
+    </footer>
+  </main>
   <script src="game.js"></script>
 </body>
 </html>

@@ -17,6 +17,10 @@
     replay: document.getElementById("replay-button"),
     reset: document.getElementById("reset-button")
   };
+  const pageUi = {
+    session: document.getElementById("session-label"),
+    level: document.getElementById("level-label")
+  };
 
   const KEY = {};
   let showHitboxes = false;
@@ -36,7 +40,10 @@
     if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
-  canvas.addEventListener("pointerdown", () => { KEY.Pointer = true; });
+  canvas.addEventListener("pointerdown", () => {
+    canvas.focus({ preventScroll: true });
+    KEY.Pointer = true;
+  });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   function bindPressButton(button, key) {
@@ -57,23 +64,45 @@
   if (buttons.reset) buttons.reset.addEventListener("click", resetSavedProgress);
 
   function updateControlLabels() {
+    document.body.dataset.mode = state.mode;
+    const statusByMode = {
+      title: "READY TO DIVE",
+      play: state.countdown > 0 ? "MISSION BRIEFING" : "RUN IN PROGRESS",
+      bonus: "SURGE ACTIVE",
+      paused: "RUN PAUSED",
+      dead: "RUN ENDED",
+      win: "MISSION COMPLETE",
+      "level-transition": "LEVEL CLEARED"
+    };
+    if (pageUi.session) pageUi.session.textContent = statusByMode[state.mode] || "SYSTEM READY";
+    if (pageUi.level) {
+      if (state.mode === "title") pageUi.level.textContent = LEVELS.length + " MISSIONS";
+      else if (state.mode === "level-transition") {
+        pageUi.level.textContent = state.transitionDestination === "next"
+          ? "NEXT · LEVEL " + (state.level + 2)
+          : state.transitionDestination === "bonus" ? "BONUS CHAPTER" : "EPILOGUE";
+      } else pageUi.level.textContent = "LEVEL " + (state.level + 1) + " / " + LEVELS.length;
+    }
     if (buttons.flap) {
-      buttons.flap.textContent = state.mode === "title" ? "START" : "FLAP";
-      buttons.flap.setAttribute("aria-label", state.mode === "title" ? "Start a new run" : "Flap");
+      const flapLabel = state.mode === "title" ? "START" : state.mode === "level-transition" ? "CONTINUE" : "FLAP";
+      buttons.flap.textContent = flapLabel;
+      buttons.flap.setAttribute("aria-label", flapLabel === "FLAP" ? "Flap" : flapLabel === "START" ? "Start a new run" : "Continue to the next chapter");
     }
     if (buttons.pause) {
-      buttons.pause.hidden = state.mode === "title";
+      buttons.pause.hidden = ["title", "level-transition", "dead", "win"].includes(state.mode);
       buttons.pause.textContent = state.mode === "paused" ? "RESUME" : "PAUSE";
       buttons.pause.setAttribute("aria-label", state.mode === "paused" ? "Resume game" : "Pause game");
     }
-    if (buttons.shout) buttons.shout.hidden = state.mode === "title";
+    if (buttons.shout) buttons.shout.hidden = ["title", "level-transition", "dead", "win", "bonus"].includes(state.mode);
     if (buttons.mute) {
       buttons.mute.textContent = audio.muted ? "UNMUTE" : "MUTE";
       buttons.mute.setAttribute("aria-label", audio.muted ? "Unmute sound" : "Mute sound");
+      buttons.mute.setAttribute("aria-pressed", String(audio.muted));
     }
     if (buttons.effects) {
       buttons.effects.textContent = reducedMotion ? "FULL FX" : "LESS FX";
       buttons.effects.setAttribute("aria-label", reducedMotion ? "Enable full visual effects" : "Reduce visual effects");
+      buttons.effects.setAttribute("aria-pressed", String(reducedMotion));
     }
     if (buttons.continue) {
       buttons.continue.textContent = "CONTINUE L" + (savedProgress.highestUnlockedLevel + 1);
@@ -82,6 +111,9 @@
     if (buttons.replay) buttons.replay.hidden = state.mode !== "title" || !savedProgress.lastRunSeed;
     if (buttons.reset) buttons.reset.hidden = state.mode !== "title";
     document.getElementById("controls")?.classList.toggle("title-mode", state.mode === "title");
+    canvas.setAttribute("aria-label", state.mode === "title"
+      ? "El Patrón game. Press Space or click to begin."
+      : "El Patrón, level " + (state.level + 1) + " of " + LEVELS.length + ". " + LEVELS[state.level].name + ".");
   }
 
   const audio = {
@@ -128,6 +160,8 @@
     boom() { this.beep(90, 0.35, "sawtooth", 0.09, 40); },
     hit() { this.beep(130, 0.2, "sawtooth", 0.08, 50); },
     link() { this.beep(660, 0.1, "square", 0.06, 1100); },
+    count() { this.beep(360, 0.08, "square", 0.045, 420); },
+    ready() { this.beep(520, 0.14, "square", 0.06, 880); },
     win() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.beep(f, 0.2, "square", 0.06), i * 130)); }
   };
 
@@ -250,6 +284,26 @@
   loadHero();
 
   function drawSidekick(ctx, x, y, t, fire, idx) {
+    const sheet = SPR.side.sheets[idx % SPR.side.sheets.length];
+    if (sheet?.complete && sheet.naturalWidth) {
+      const frame = fire > 0 ? 2 : (Math.floor((t + idx * 7) / 9) % 2);
+      const frameSize = sheet.height;
+      const drawSize = 86;
+      const recoil = fire > 0 && fire % 4 < 2 ? -2 : 0;
+      const bob = reducedMotion ? 0 : Math.sin(t * 0.08 + idx * 1.7) * 1.5;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(Math.round(x - 25 + recoil), Math.round(y - 26 + bob));
+      ctx.drawImage(
+        sheet,
+        frame * frameSize, 0, frameSize, frameSize,
+        0, 0, drawSize, drawSize
+      );
+      ctx.restore();
+      return;
+    }
+
+    // Lightweight fallback used only if the authored companion sheets fail to load.
     ctx.save();
     ctx.translate(x + 32, y + 23);
     
@@ -306,10 +360,14 @@
     g.fillRect(x, y, w, h);
   }
 
-  SPR.side.idle = null; // cleaned up
-  SPR.side.kickA = null;
-  SPR.side.kickB = null;
-  SPR.side.fire = null;
+  const companionVariants = ["cyan", "amber", "coral"];
+  SPR.side.sheets = new Array(companionVariants.length);
+  companionVariants.forEach((variant, index) => {
+    const image = new Image();
+    image.onload = () => { SPR.side.sheets[index] = image; };
+    image.onerror = () => console.warn("Could not load companion sprite: assets/companions/swimmer-" + variant + ".png");
+    image.src = "assets/companions/swimmer-" + variant + ".png";
+  });
 
   function sapCannon(g) {
     pxBox(g, 14, 4, 34, 56, "#082a2b");
@@ -609,6 +667,11 @@
     {
       name: "ANYPOINT STUDIO",
       sub: "Link connectors for bonus vesting. T clears nearby threats.",
+      story: [
+        "The SAP Connector is certified. Now Anypoint",
+        "Studio must be rescued from Pavel P., the evil",
+        "Russian saboteur who contaminated it with NPEs."
+      ],
       sky: ["#102030", "#1a3850", "#081018"],
       accent: "#00a1e0",
       length: 4600,
@@ -627,6 +690,11 @@
     {
       name: "DATAWEAVE CHASM",
       sub: "Squad of 2. T launches homing rockets at up to 6 threats.",
+      story: [
+        "The new route descends into DataWeave Chasm,",
+        "where maps rewrite themselves. A second diver",
+        "answers the beacon as Informatica wakes below."
+      ],
       sky: ["#061828", "#123050", "#081018"],
       accent: "#c4b070",
       length: 5000,
@@ -645,6 +713,11 @@
     {
       name: "API PLATFORM",
       sub: "Squad of 3. Route and survive.",
+      story: [
+        "The chasm opens onto a sunken API city.",
+        "Every unstable gateway attracts predators—and",
+        "Kong controls the only channel to the surface."
+      ],
       sky: ["#102838", "#1a4860", "#0a1820"],
       accent: "#7fd7ff",
       length: 5200,
@@ -662,6 +735,11 @@
     {
       name: "MULE 4 ABYSS",
       sub: "High pressure. Squad of 4.",
+      story: [
+        "Beyond Kong's current lies Mule 4 Abyss, where",
+        "pressure crushes weak systems. TIBCO guards the",
+        "deepest connectors behind hostile code."
+      ],
       sky: ["#020810", "#061828", "#010408"],
       accent: "#204060",
       length: 5400,
@@ -679,6 +757,11 @@
     {
       name: "IPO CONTROL PLANE",
       sub: "Full squad. Cash the vault.",
+      story: [
+        "The final ascent reaches Oracle's fortified vault.",
+        "The full squad has one chance to secure every link,",
+        "survive the last defense, and open the horizon."
+      ],
       sky: ["#101018", "#2a1840", "#080810"],
       accent: "#d4a017",
       length: 5600,
@@ -695,10 +778,31 @@
     }
   ];
 
+  const BONUS_CHAPTER = {
+    title: "CRM VESTING SURGE",
+    accent: "#60dfa0",
+    objective: "Survive the market columns to multiply the entire run.",
+    story: [
+      "Every connector holds. The hidden CRM current",
+      "erupts beneath the IPO vault, turning the market",
+      "into one final, accelerating vesting surge."
+    ]
+  };
+  const ENDING_CHAPTER = {
+    title: "THE VESTING HORIZON",
+    accent: "#f0d060",
+    objective: "The route is complete. Surface and secure the run.",
+    story: [
+      "Oracle's vault falls silent. The squad clears the",
+      "last firewall and the control plane opens above.",
+      "El Patrón has reached the vesting horizon."
+    ]
+  };
+
   // The boss encounters use the same movement and Trabajeen input as the levels.
   const BOSSES = [
     { name: "SAP", creature: "crab", sheetX: 0, sheetY: 100, sheetH: 390, w: 160, h: 100, color: "#f2a900" },
-    { name: "BOOMI", creature: "manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, color: "#83bce8" },
+    { name: "PAVEL", creature: "NPE manta ray", sheetX: 512, sheetY: 90, sheetH: 400, w: 174, h: 96, color: "#83bce8" },
     { name: "INFORMATICA", creature: "octopus", sheetX: 1024, sheetY: 90, sheetH: 400, w: 142, h: 120, color: "#f09475" },
     { name: "KONG", creature: "electric eel", sheetX: 0, sheetY: 560, sheetH: 400, w: 184, h: 88, color: "#5fe4ec" },
     { name: "TIBCO", creature: "pufferfish", sheetX: 512, sheetY: 560, sheetH: 400, w: 132, h: 128, color: "#edc95d" },
@@ -839,6 +943,9 @@
     damageFlash: 0,
     transitionTimer: 0,
     transitionReward: 0,
+    transitionBreakdown: null,
+    transitionDestination: "next",
+    countdown: 0,
     bubbles: [],
     links: [],
     linked: 0,
@@ -864,7 +971,8 @@
     bonusChartCandles: [],
     bonusChartPrice: 100,
     bonusEnded: false,
-    pausedFrom: "play"
+    pausedFrom: "play",
+    stats: { hits: 0, kills: 0, links: 0, bosses: 0 }
   };
 
   state.checkpoint = savedProgress.highestUnlockedLevel;
@@ -953,6 +1061,7 @@
     state.needLink = L.connectors;
     state.dist = 0;
     state.distanceVested = 0;
+    state.countdown = 105;
     state.trabajeen = L.shouts ?? 3;
     state.shoutPulse = 0;
     state.shoutText = 0;
@@ -970,8 +1079,8 @@
     state.squad = [];
     for (let i = 0; i < L.squad; i++) {
       state.squad.push({
-        x: 90 - i * 36,
-        y: state.player.y + (i % 2 ? 28 : -28),
+        x: 86 - i * 42,
+        y: state.player.y + (i % 2 ? 34 : -34),
         kick: 0,
         fire: 0
       });
@@ -1169,7 +1278,7 @@
         const shooter = state.squad[shooterIndex];
         state.ents.push({
           type: "rocket",
-          x: shooter.x + 30,
+          x: shooter.x + 66,
           y: shooter.y + 20,
           w: 22,
           h: 10,
@@ -1188,7 +1297,7 @@
       const shooter = state.squad[i % state.squad.length];
       state.ents.push({
         type: "rocket",
-        x: shooter.x + 30,
+        x: shooter.x + 66,
         y: shooter.y + 20,
         w: 22,
         h: 10,
@@ -1216,6 +1325,7 @@
         target.alive = false;
         state.bossActive = false;
         state.score += 300;
+        state.stats.bosses++;
         banner(target.config.name + " DEFEATED · GATE OPEN");
       }
       return true;
@@ -1224,6 +1334,7 @@
     target.rocketTargeted = false;
     rocket.alive = false;
     const points = target.type === "cannon" ? 80 : 50;
+    state.stats.kills++;
     state.score += points;
     addScoreEffect(target.x + target.w / 2, target.y + target.h / 2, "+" + points, "#ffd86b");
     burst(target.x + target.w / 2, target.y + target.h / 2, "#ff8040", 12);
@@ -1280,6 +1391,7 @@
   function damage(reason = "HAZARD") {
     if (state.invuln > 0) return;
     state.health--;
+    state.stats.hits++;
     state.invuln = 70;
     state.hurtTimer = 18;
     state.damageFlash = 10;
@@ -1297,6 +1409,7 @@
         else {
           state.mode = "dead";
           if (!state.devRun) persistSavedProgress({ bestVested: Math.max(savedProgress.bestVested, state.vested) });
+          updateControlLabels();
         }
       }
     }
@@ -1407,7 +1520,15 @@
   function finishLevel() {
     if (state.finishing || state.health <= 0 || state.boss?.alive) return;
     state.finishing = true;
-    const completionBonus = 200 + state.score + state.linked * 80 + state.health * 50;
+    state.transitionBreakdown = {
+      distance: state.distanceVested,
+      clear: 200,
+      combat: state.score,
+      links: state.linked * 80,
+      survival: state.health * 50
+    };
+    const completionBonus = state.transitionBreakdown.clear + state.transitionBreakdown.combat +
+      state.transitionBreakdown.links + state.transitionBreakdown.survival;
     state.transitionReward = state.distanceVested + completionBonus;
     state.vested += completionBonus;
     if (!state.devRun) {
@@ -1418,13 +1539,13 @@
     }
     state.score = 0;
     audio.win();
-    if (state.level >= LEVELS.length - 1) {
-      if (state.perfectLinkRun && state.linked === state.needLink) startBonus(false);
-      else state.mode = "win";
-      return;
-    }
-    state.transitionTimer = 45;
+    state.transitionDestination = state.level < LEVELS.length - 1
+      ? "next"
+      : state.perfectLinkRun && state.linked === state.needLink ? "bonus" : "win";
+    state.transitionTimer = 30;
     state.mode = "level-transition";
+    KEY.Enter = KEY.Space = KEY.Pointer = KEY.KeyT = false;
+    updateControlLabels();
   }
 
   function startGame(fromCheckpoint, checkpointLevel, runSeed, options = {}) {
@@ -1441,6 +1562,8 @@
     if (!state.devRun) DEV.godMode = false;
     state.score = 0;
     state.health = state.maxHealth;
+    state.stats = { hits: 0, kills: 0, links: 0, bosses: 0 };
+    state.transitionBreakdown = null;
     if (!fromCheckpoint) {
       state.level = 0;
       state.vested = 0;
@@ -1548,13 +1671,28 @@
 
     if (state.mode === "level-transition") {
       KEY.KeyP = KEY.Escape = false;
-      state.transitionTimer--;
-      if (state.transitionTimer <= 0) {
+      if (state.transitionTimer > 0) {
+        state.transitionTimer--;
+        KEY.Enter = KEY.Space = KEY.Pointer = KEY.KeyT = false;
+        return;
+      }
+      if (KEY.Enter || KEY.Space || KEY.Pointer) {
+        KEY.Enter = KEY.Space = KEY.Pointer = KEY.KeyT = false;
+        if (state.transitionDestination === "bonus") {
+          startBonus(false);
+          return;
+        }
+        if (state.transitionDestination === "win") {
+          state.mode = "win";
+          updateControlLabels();
+          return;
+        }
         state.level++;
         state.checkpoint = state.level;
         state.health = Math.min(state.maxHealth, state.health + 1);
         state.mode = "play";
         spawnLevel();
+        updateControlLabels();
       }
       return;
     }
@@ -1568,6 +1706,19 @@
     }
     if (state.mode === "paused") return;
     if (state.mode === "bonus") { updateBonus(); return; }
+
+    if (state.countdown > 0) {
+      state.t++;
+      state.countdown--;
+      KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+      if ([90, 60, 30].includes(state.countdown)) audio.count();
+      if (state.countdown === 0) {
+        audio.ready();
+        banner("DIVE!");
+        updateControlLabels();
+      }
+      return;
+    }
 
     state.t++;
 
@@ -1611,12 +1762,15 @@
     state.effects = state.effects.filter((effect) => effect.life > 0);
 
     state.squad.forEach((s, i) => {
-      const tx = p.x - 70 - i * 34;
-      const ty = p.y + (i % 2 ? 32 : -30);
+      const tx = p.x - 74 - i * 40;
+      const ty = p.y + (i % 2 ? 36 : -34);
       s.x += (tx - s.x) * 0.12;
       s.y += (ty - s.y) * 0.12;
       s.kick = (state.t + i * 4) % 12 < 6 ? 1 : 0;
       if (s.fire > 0) s.fire--;
+      if ((state.t + i * 9) % 38 === 0) {
+        state.bubbles.push({ x: s.x - 20, y: s.y + 20, vy: -0.55, life: 34 });
+      }
     });
 
     if (state.t % 16 === 0) {
@@ -1703,6 +1857,7 @@
       if (e.type === "connector" && !e.linked && !e.missed && aabb(connectorPickup, e)) {
         e.linked = true;
         state.linked++;
+        state.stats.links++;
         state.score += 120;
         const connectorX = e.x + CONNECTOR_CENTER;
         const connectorY = e.y + CONNECTOR_CENTER;
@@ -2174,6 +2329,58 @@
     ctx.restore();
   }
 
+  function drawPanel(x, y, w, h, options = {}) {
+    ctx.save();
+    ctx.fillStyle = options.fill || "rgba(4, 16, 24, 0.9)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, options.radius ?? 7);
+    ctx.fill();
+    if (options.stroke !== false) {
+      ctx.strokeStyle = options.stroke || "rgba(127, 215, 255, 0.3)";
+      ctx.lineWidth = options.lineWidth || 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawCountdown() {
+    if (state.countdown <= 0 || state.mode !== "play") return;
+    const L = LEVELS[state.level];
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 7, 12, 0.38)";
+    ctx.fillRect(0, 36, W, H - 36);
+    if (state.countdown > 90) {
+      drawPanel(260, 176, 440, 170, { stroke: L.accent, lineWidth: 2 });
+      ctx.textAlign = "center";
+      ctx.fillStyle = L.accent;
+      ctx.font = "9px 'Press Start 2P', monospace";
+      ctx.fillText("MISSION " + String(state.level + 1).padStart(2, "0") + " / " + String(LEVELS.length).padStart(2, "0"), W / 2, 214);
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "15px 'Press Start 2P', monospace";
+      ctx.fillText(L.name, W / 2, 257);
+      ctx.fillStyle = "#a9cbd7";
+      ctx.font = "23px 'VT323', monospace";
+      ctx.fillText(L.sub, W / 2, 301);
+      ctx.fillStyle = "#f0d060";
+      ctx.font = "18px 'VT323', monospace";
+      ctx.fillText("GET READY", W / 2, 328);
+    } else {
+      const count = Math.max(1, Math.ceil(state.countdown / 30));
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(3, 14, 21, 0.8)";
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, 62, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = L.accent;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "42px 'Press Start 2P', monospace";
+      ctx.fillText(String(count), W / 2, H / 2 + 16);
+    }
+    ctx.restore();
+  }
+
   function drawHud() {
     const L = LEVELS[state.level];
     ctx.fillStyle = "rgba(4,16,24,0.75)";
@@ -2378,6 +2585,7 @@
     }
 
     drawHud();
+    drawCountdown();
     ctx.restore();
 
     if (state.damageFlash > 0) {
@@ -2553,21 +2761,96 @@
     }
   }
 
+  function getTransitionChapter() {
+    if (state.transitionDestination === "bonus") return { ...BONUS_CHAPTER, threat: "MARKET SURGE" };
+    if (state.transitionDestination === "win") return { ...ENDING_CHAPTER, threat: "ROUTE SECURED" };
+    const nextLevel = LEVELS[state.level + 1];
+    return {
+      title: nextLevel.name,
+      accent: nextLevel.accent,
+      objective: nextLevel.sub,
+      story: nextLevel.story,
+      threat: BOSSES[state.level + 1]?.name + " BOSS"
+    };
+  }
+
   function drawLevelTransition() {
     drawPlay();
-    ctx.fillStyle = "rgba(0, 8, 14, 0.72)";
+    const chapter = getTransitionChapter();
+    ctx.fillStyle = "rgba(0, 8, 14, 0.84)";
     ctx.fillRect(0, 0, W, H);
+    drawPanel(52, 54, 856, 432, { fill: "rgba(5, 20, 28, 0.98)", stroke: chapter.accent, lineWidth: 2, radius: 10 });
+
     ctx.textAlign = "center";
+    ctx.fillStyle = "#71dfaa";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("CHECKPOINT SECURED  ·  LEVEL " + (state.level + 1) + " COMPLETE", W / 2, 86);
+    ctx.fillStyle = "rgba(127, 215, 255, 0.16)";
+    ctx.fillRect(78, 104, 804, 1);
+
+    const breakdown = state.transitionBreakdown || { distance: 0, clear: 200, combat: 0, links: 0, survival: 0 };
+    const rows = [
+      ["DISTANCE", breakdown.distance],
+      ["MISSION", breakdown.clear],
+      ["COMBAT", breakdown.combat],
+      ["LINKS", breakdown.links],
+      ["SURVIVAL", breakdown.survival]
+    ];
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#789eac";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("PAYOUT REPORT", 91, 139);
+    ctx.font = "20px 'VT323', monospace";
+    rows.forEach((row, index) => {
+      const y = 174 + index * 29;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#8fb8c8";
+      ctx.fillText(row[0], 91, y);
+      ctx.textAlign = "right";
+      ctx.fillStyle = row[1] ? "#dcebf0" : "#536f7a";
+      ctx.fillText("+$" + row[1], 316, y);
+    });
+    ctx.fillStyle = "rgba(127, 215, 255, 0.18)";
+    ctx.fillRect(90, 328, 226, 1);
     ctx.fillStyle = "#f0d060";
-    ctx.font = "16px 'Press Start 2P', monospace";
-    ctx.fillText("LEVEL COMPLETE", W / 2, H / 2 - 32);
-    ctx.fillStyle = "#cde8f5";
-    ctx.font = "30px 'VT323', monospace";
-    ctx.fillText("Vested +$" + state.transitionReward, W / 2, H / 2 + 8);
-    ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Includes +$80 per linked connector", W / 2, H / 2 + 36);
-    ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Next: " + LEVELS[state.level + 1].name, W / 2, H / 2 + 64);
+    ctx.font = "26px 'VT323', monospace";
+    ctx.textAlign = "right";
+    ctx.fillText("TOTAL  +$" + state.transitionReward, 316, 361);
+    ctx.fillStyle = "#688b98";
+    ctx.font = "17px 'VT323', monospace";
+    ctx.fillText("VESTED  $" + state.vested, 316, 390);
+
+    ctx.fillStyle = "rgba(127, 215, 255, 0.12)";
+    ctx.fillRect(347, 122, 1, 294);
+    ctx.textAlign = "left";
+    ctx.fillStyle = chapter.accent;
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText(state.transitionDestination === "win" ? "EPILOGUE" : "NEXT CHAPTER", 386, 139);
+    ctx.fillStyle = "#f4f7fb";
+    ctx.font = "14px 'Press Start 2P', monospace";
+    ctx.fillText(chapter.title, 386, 177);
+    ctx.fillStyle = "#6f96a5";
+    ctx.font = "17px 'VT323', monospace";
+    ctx.fillText("THREAT  ·  " + chapter.threat, 386, 207);
+
+    ctx.fillStyle = "#cde3eb";
+    ctx.font = "21px 'VT323', monospace";
+    chapter.story.forEach((line, index) => ctx.fillText(line, 386, 251 + index * 29, 474));
+
+    drawPanel(382, 350, 479, 62, { fill: "rgba(18, 48, 61, 0.78)", stroke: "rgba(127, 215, 255, 0.22)", radius: 5 });
+    ctx.fillStyle = "#789eac";
+    ctx.font = "7px 'Press Start 2P', monospace";
+    ctx.fillText("MISSION OBJECTIVE", 399, 371);
+    ctx.fillStyle = "#d7edf6";
+    ctx.font = "19px 'VT323', monospace";
+    ctx.fillText(chapter.objective, 399, 397, 445);
+
+    if (state.transitionTimer <= 0) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#f0d060";
+      ctx.font = "9px 'Press Start 2P', monospace";
+      ctx.fillText("ENTER / SPACE / TAP  ·  CONTINUE", W / 2, 457);
+    }
     ctx.textAlign = "left";
   }
 
@@ -2628,33 +2911,65 @@
 
   function drawTitle() {
     drawBg();
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillStyle = "rgba(0, 7, 12, 0.66)";
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = "center";
+    ctx.fillStyle = "#77cde9";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("A SIX-STAGE UNDERWATER ARCADE RUN", W / 2, 48);
     ctx.fillStyle = "#f0d060";
-    ctx.font = "20px 'Press Start 2P', monospace";
-    ctx.fillText("EL PATRON", W / 2, 120);
+    ctx.font = "27px 'Press Start 2P', monospace";
+    ctx.fillText("EL PATRÓN", W / 2, 101);
     ctx.fillStyle = "#7fd7ff";
-    ctx.font = "12px 'Press Start 2P', monospace";
-    ctx.fillText("THE VESTING HORIZON", W / 2, 150);
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.fillText("THE VESTING HORIZON", W / 2, 132);
+
+    drawPanel(82, 156, 796, 210, { fill: "rgba(4, 17, 25, 0.92)", stroke: "rgba(127, 215, 255, 0.36)" });
+    ctx.fillStyle = "rgba(127, 215, 255, 0.1)";
+    ctx.fillRect(336, 157, 1, 208);
     const hero = SPR.hero.ready ? SPR.hero.thumbs : null;
-    if (hero) ctx.drawImage(hero, W / 2 - hero.width / 2, 168);
+    if (hero) {
+      const scale = Math.min(2.15, 168 / hero.height);
+      ctx.drawImage(hero, 210 - hero.width * scale / 2, 186, hero.width * scale, hero.height * scale);
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#789eac";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("YOUR OBJECTIVE", 380, 193);
     ctx.fillStyle = "#cde8f5";
     ctx.font = "26px 'VT323', monospace";
-    ctx.fillText("Dodge hazards, defeat bosses, and link every connector for CRM SURGE.", W / 2, 320);
-    ctx.fillText("SPACE flap   ·   T Trabajeen!   ·   P pause   ·   M mute   ·   R effects", W / 2, 348);
+    ctx.fillText("Dodge hazards. Defeat six bosses.", 380, 229);
+    ctx.fillText("Link every connector to unlock CRM SURGE.", 380, 258);
+    [["SPACE / CLICK", "FLAP"], ["T", "TRABAJEEEN"], ["P / ESC", "PAUSE"]].forEach((item, index) => {
+      const x = 380 + index * 148;
+      ctx.fillStyle = "#143747";
+      ctx.fillRect(x, 292, 132, 43);
+      ctx.fillStyle = "#7fd7ff";
+      ctx.font = "7px 'Press Start 2P', monospace";
+      ctx.fillText(item[0], x + 10, 308);
+      ctx.fillStyle = "#d6e9f0";
+      ctx.font = "17px 'VT323', monospace";
+      ctx.fillText(item[1], x + 10, 329);
+    });
+
+    const hasContinue = savedProgress.highestUnlockedLevel > 0;
+    drawPanel(255, 389, 450, hasContinue ? 72 : 54, { fill: "rgba(20, 49, 61, 0.95)", stroke: "#c2a847", lineWidth: 2, radius: 6 });
+    ctx.textAlign = "center";
     ctx.fillStyle = "#f0d060";
-    ctx.fillText("ENTER / SPACE: NEW RUN", W / 2, 390);
-    if (savedProgress.highestUnlockedLevel > 0) {
-      ctx.fillText("C: CONTINUE FROM L" + (savedProgress.highestUnlockedLevel + 1), W / 2, 420);
+    ctx.font = "10px 'Press Start 2P', monospace";
+    ctx.fillText("ENTER / SPACE  ·  START NEW RUN", W / 2, 421);
+    if (hasContinue) {
+      ctx.fillStyle = "#8ddcf5";
+      ctx.font = "18px 'VT323', monospace";
+      ctx.fillText("C  ·  Continue from level " + (savedProgress.highestUnlockedLevel + 1), W / 2, 450);
     }
     ctx.fillStyle = "#7fb4c8";
-    ctx.font = "20px 'VT323', monospace";
-    ctx.fillText("BEST VESTED: $" + savedProgress.bestVested + "   ·   BEST SURGE: " + savedProgress.bestBonusSeconds + "s   ·   X: RESET", W / 2, 454);
-    if (savedProgress.lastRunSeed) ctx.fillText("S: REPLAY LAST SEED " + savedProgress.lastRunSeed, W / 2, 478);
+    ctx.font = "18px 'VT323', monospace";
+    ctx.fillText("BEST  $" + String(savedProgress.bestVested).padStart(6, "0") + "   ·   SURGE  " + savedProgress.bestBonusSeconds + "s   ·   X  RESET", W / 2, 488);
+    if (savedProgress.lastRunSeed) ctx.fillText("S  ·  Replay run " + savedProgress.lastRunSeed, W / 2, 514);
     if (DEV.enabled) {
       ctx.fillStyle = "#71dfaa";
-      ctx.fillText("DEV MODE: F2 FOR LEVEL SELECT + GOD MODE", W / 2, 506);
+      ctx.fillText("DEV MODE  ·  F2 LEVEL SELECT", W / 2, 534);
     }
     ctx.textAlign = "left";
   }
@@ -2662,22 +2977,44 @@
   function drawEnd(win) {
     if (state.bonusEnded) drawBonus();
     else drawPlay();
-    ctx.fillStyle = "rgba(0,0,0,0.62)";
+    ctx.fillStyle = "rgba(0, 7, 12, 0.78)";
     ctx.fillRect(0, 0, W, H);
+    drawPanel(268, 92, 424, 356, {
+      fill: "rgba(5, 20, 28, 0.97)",
+      stroke: win ? "#c2a847" : "#8b4051",
+      lineWidth: 2,
+      radius: 9
+    });
     ctx.textAlign = "center";
+    ctx.fillStyle = win ? "#71dfaa" : "#ff7890";
+    ctx.font = "9px 'Press Start 2P', monospace";
+    ctx.fillText(win ? "MISSION COMPLETE" : "RUN TERMINATED", W / 2, 128);
     ctx.fillStyle = "#f0d060";
-    ctx.font = "16px 'Press Start 2P', monospace";
-    ctx.fillText(win ? (state.bonusEnded ? "CRM VESTING SURGE" : "SAP CONQUERED · IPO") : "RUNTIME CRASH", W / 2, 220);
+    ctx.font = "15px 'Press Start 2P', monospace";
+    ctx.fillText(win ? (state.bonusEnded ? "CRM VESTING SURGE" : "IPO HORIZON REACHED") : "RUNTIME CRASH", W / 2, 166);
     ctx.fillStyle = "#cde8f5";
-    ctx.font = "28px 'VT323', monospace";
-    ctx.fillText("Vested options: $" + state.vested, W / 2, 266);
+    ctx.font = "38px 'VT323', monospace";
+    ctx.fillText("$" + state.vested + " VESTED", W / 2, 214);
     if (state.bonusEnded) {
-      ctx.fillText("Base $" + state.bonusBaseVested + " + bonus $" + (state.vested - state.bonusBaseVested), W / 2, 295);
-      ctx.fillText(state.bonusSeconds + "s survived · x" + state.bonusMultiplier.toFixed(1) + " multiplier", W / 2, 324);
+      ctx.fillStyle = "#8fb8c8";
+      ctx.font = "20px 'VT323', monospace";
+      ctx.fillText("Base $" + state.bonusBaseVested + "  +  bonus $" + (state.vested - state.bonusBaseVested), W / 2, 246);
+      ctx.fillText(state.bonusSeconds + "s survived  ·  x" + state.bonusMultiplier.toFixed(1), W / 2, 272);
     }
-    ctx.fillText(state.checkpoint > 0 && !win ? "ENTER resume from L" + (state.checkpoint + 1) : "ENTER to dive again", W / 2, state.bonusEnded ? 365 : 314);
-    ctx.font = "22px 'VT323', monospace";
-    ctx.fillText("Run seed: " + state.runSeed, W / 2, state.bonusEnded ? 396 : 348);
+    const statsY = state.bonusEnded ? 307 : 264;
+    ctx.fillStyle = "#789eac";
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillText("RUN REPORT", W / 2, statsY);
+    ctx.fillStyle = "#cde8f5";
+    ctx.font = "21px 'VT323', monospace";
+    ctx.fillText("LINKS " + state.stats.links + "   ·   KILLS " + state.stats.kills + "   ·   BOSSES " + state.stats.bosses, W / 2, statsY + 31);
+    ctx.fillText("DAMAGE TAKEN  " + state.stats.hits, W / 2, statsY + 58);
+    ctx.fillStyle = "#718f9a";
+    ctx.font = "17px 'VT323', monospace";
+    ctx.fillText("RUN ID  " + state.runSeed, W / 2, statsY + 88);
+    ctx.fillStyle = "#f0d060";
+    ctx.font = "21px 'VT323', monospace";
+    ctx.fillText(state.checkpoint > 0 && !win ? "ENTER  ·  Resume from level " + (state.checkpoint + 1) : "ENTER  ·  Dive again", W / 2, 414);
     ctx.textAlign = "left";
   }
 
@@ -2689,6 +3026,11 @@
     accumulator = 0;
     if (document.hidden) {
       KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+      if (["play", "bonus"].includes(state.mode)) {
+        state.pausedFrom = state.mode;
+        state.mode = "paused";
+        updateControlLabels();
+      }
     }
   });
 
