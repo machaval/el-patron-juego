@@ -23,13 +23,20 @@
   };
 
   const KEY = {};
+  const POINTER = { active: false, x: 0, y: 0 };
   let showHitboxes = false;
+  const queryParams = new URLSearchParams(window.location.search);
   const DEV = {
-    enabled: new URLSearchParams(window.location.search).get("dev") === "1",
+    enabled: queryParams.get("dev") === "1",
     panelOpen: false,
-    godMode: false
+    godMode: false,
+    startLevel: Number.parseInt(queryParams.get("level"), 10)
   };
   addEventListener("keydown", (e) => {
+    if (e.repeat && LEVELS[state.level]?.mode === "platform" && ["Space", "ArrowUp", "KeyW"].includes(e.code)) {
+      e.preventDefault();
+      return;
+    }
     if (e.repeat && ["KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) return;
     if (e.code === "KeyX" && state.mode === "title") {
       e.preventDefault();
@@ -37,13 +44,26 @@
       return;
     }
     KEY[e.code] = true;
-    if (["Space", "ArrowUp", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) e.preventDefault();
+    if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "KeyF", "KeyX", "KeyT", "KeyP", "Escape", "KeyM", "KeyR", "KeyH", "F2"].includes(e.code)) e.preventDefault();
   });
   addEventListener("keyup", (e) => { KEY[e.code] = false; });
-  canvas.addEventListener("pointerdown", () => {
+  function updatePointerPosition(event) {
+    const rect = canvas.getBoundingClientRect();
+    POINTER.x = (event.clientX - rect.left) * W / rect.width;
+    POINTER.y = (event.clientY - rect.top) * H / rect.height;
+  }
+  canvas.addEventListener("pointerdown", (event) => {
     canvas.focus({ preventScroll: true });
+    canvas.setPointerCapture(event.pointerId);
+    updatePointerPosition(event);
+    POINTER.active = true;
     KEY.Pointer = true;
   });
+  canvas.addEventListener("pointermove", (event) => {
+    if (POINTER.active) updatePointerPosition(event);
+  });
+  canvas.addEventListener("pointerup", () => { POINTER.active = false; });
+  canvas.addEventListener("pointercancel", () => { POINTER.active = false; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   function bindPressButton(button, key) {
@@ -84,16 +104,24 @@
       } else pageUi.level.textContent = "LEVEL " + (state.level + 1) + " / " + LEVELS.length;
     }
     if (buttons.flap) {
-      const flapLabel = state.mode === "title" ? "START" : state.mode === "level-transition" ? "CONTINUE" : "FLAP";
+      const levelMode = LEVELS[state.level]?.mode;
+      const flapLabel = state.mode === "title" ? "START"
+        : state.mode === "level-transition" ? "CONTINUE"
+          : levelMode === "platform" ? "JUMP" : levelMode === "shooter" ? "FIRE" : "FLAP";
       buttons.flap.textContent = flapLabel;
-      buttons.flap.setAttribute("aria-label", flapLabel === "FLAP" ? "Flap" : flapLabel === "START" ? "Start a new run" : "Continue to the next chapter");
+      const actionLabels = { FLAP: "Flap", JUMP: "Jump", FIRE: "Fire", START: "Start a new run", CONTINUE: "Continue to the next chapter" };
+      buttons.flap.setAttribute("aria-label", actionLabels[flapLabel]);
     }
     if (buttons.pause) {
       buttons.pause.hidden = ["title", "level-transition", "dead", "win"].includes(state.mode);
       buttons.pause.textContent = state.mode === "paused" ? "RESUME" : "PAUSE";
       buttons.pause.setAttribute("aria-label", state.mode === "paused" ? "Resume game" : "Pause game");
     }
-    if (buttons.shout) buttons.shout.hidden = ["title", "level-transition", "dead", "win", "bonus"].includes(state.mode);
+    if (buttons.shout) {
+      buttons.shout.hidden = ["title", "level-transition", "dead", "win", "bonus"].includes(state.mode);
+      buttons.shout.textContent = LEVELS[state.level]?.mode === "shooter" ? "SALVO" : "TRABAJEEEN";
+      buttons.shout.setAttribute("aria-label", LEVELS[state.level]?.mode === "shooter" ? "Launch squad salvo" : "Use Trabajeen");
+    }
     if (buttons.mute) {
       buttons.mute.textContent = audio.muted ? "UNMUTE" : "MUTE";
       buttons.mute.setAttribute("aria-label", audio.muted ? "Unmute sound" : "Mute sound");
@@ -158,6 +186,7 @@
       });
     },
     boom() { this.beep(90, 0.35, "sawtooth", 0.09, 40); },
+    shot() { this.beep(760, 0.055, "square", 0.025, 520); },
     hit() { this.beep(130, 0.2, "sawtooth", 0.08, 50); },
     link() { this.beep(660, 0.1, "square", 0.06, 1100); },
     count() { this.beep(360, 0.08, "square", 0.045, 420); },
@@ -204,7 +233,17 @@
     g.stroke();
   }
 
-  const SPR = { hero: { ready: false }, side: {} };
+  const SPR = { hero: { ready: false }, side: {}, level4: {}, level5: {} };
+  loadEnemyImage("assets/level4/api-platform.png", (image) => { SPR.level4.platform = image; });
+  loadEnemyImage("assets/level4/api-token.png", (image) => { SPR.level4.token = image; });
+  loadEnemyImage("assets/level4/hero-runner-harpoon-v2.png", (image) => { SPR.level4.runner = image; });
+  loadEnemyImage("assets/level4/hero-actions-harpoon.png", (image) => { SPR.level4.actions = image; });
+  loadEnemyImage("assets/level4/companion-runner-strip.png", (image) => {
+    SPR.level4.companions = [image, image, image];
+  });
+  loadEnemyImage("assets/level4/api-city-background.png", (image) => { SPR.level4.background = image; });
+  loadEnemyImage("assets/level4/api-spike-trap.png", (image) => { SPR.level4.spikes = image; });
+  loadEnemyImage("assets/level5/cowboy-gunner-strip.png", (image) => { SPR.level5.gunner = image; });
   SPR.lifeIcon = makeCanvas(40, 40, (g) => {
     g.fillStyle = "#00a1e0";
     g.beginPath();
@@ -712,47 +751,49 @@
     },
     {
       name: "API PLATFORM",
-      sub: "Squad of 3. Route and survive.",
+      sub: "PLATFORM RUN · SPACE jumps up to 3 times. DOWN dodges. X fires harpoon.",
       story: [
-        "The chasm opens onto a sunken API city.",
-        "Every unstable gateway attracts predators—and",
-        "Kong controls the only channel to the surface."
+        "The chasm opens onto a sunken API city built",
+        "from moving routes, raised blocks, and broken",
+        "bridges. Kong controls the platform to the surface."
       ],
-      sky: ["#102838", "#1a4860", "#0a1820"],
-      accent: "#7fd7ff",
+      mode: "platform",
+      sky: ["#135473", "#227f91", "#092b38"],
+      accent: "#f0d060",
       length: 5200,
       speed: 3.65,
-      gravity: 0.33,
-      flap: -5.9,
-      cannons: true,
+      gravity: 0.58,
+      flap: -11.2,
+      cannons: false,
       bugs: true,
-      connectors: 8,
+      connectors: 0,
       squad: 3,
       killN: 9,
       shouts: 6,
-      fire: true
+      fire: false
     },
     {
       name: "MULE 4 ABYSS",
-      sub: "High pressure. Squad of 4.",
+      sub: "ARCADE SALVO · ARROWS/WASD or drag to move. SPACE fires. T launches a salvo.",
       story: [
-        "Beyond Kong's current lies Mule 4 Abyss, where",
-        "pressure crushes weak systems. TIBCO guards the",
-        "deepest connectors behind hostile code."
+        "Beyond Kong's platform lies a frontier crossfire.",
+        "TIBCO has armed the Mule 4 Abyss with roaming",
+        "gunners. The squad must shoot a route through."
       ],
-      sky: ["#020810", "#061828", "#010408"],
-      accent: "#204060",
+      mode: "shooter",
+      sky: ["#4b2b1b", "#8b542e", "#21120c"],
+      accent: "#edc95d",
       length: 5400,
       speed: 3.8,
       gravity: 0.36,
       flap: -6.1,
-      cannons: true,
+      cannons: false,
       bugs: true,
       connectors: 8,
       squad: 4,
       killN: 12,
       shouts: 6,
-      fire: true
+      fire: false
     },
     {
       name: "IPO CONTROL PLANE",
@@ -933,6 +974,13 @@
     shoutText: 0,
     invuln: 0,
     kick: 0,
+    grounded: false,
+    jumpCount: 0,
+    shooterCooldown: 0,
+    dodgeTimer: 0,
+    dodgeCooldown: 0,
+    harpoonCooldown: 0,
+    harpoonFlash: 0,
     player: { x: 170, y: 240, vy: 0, w: 70, h: 38 },
     squad: [],
     ents: [],
@@ -950,6 +998,8 @@
     links: [],
     linked: 0,
     needLink: 0,
+    tokensCollected: 0,
+    tokensTotal: 0,
     banner: null,
     bannerLife: 0,
     levelIntroLife: 0,
@@ -1059,6 +1109,8 @@
     state.links = [];
     state.linked = 0;
     state.needLink = L.connectors;
+    state.tokensCollected = 0;
+    state.tokensTotal = 0;
     state.dist = 0;
     state.distanceVested = 0;
     state.countdown = 105;
@@ -1073,17 +1125,49 @@
     state.bossActive = false;
     state.bossTime = 0;
     state.hurtTimer = 0;
+    state.grounded = L.mode === "platform";
+    state.jumpCount = 0;
+    state.shooterCooldown = 0;
+    state.dodgeTimer = 0;
+    state.dodgeCooldown = 0;
+    state.harpoonCooldown = 0;
+    state.harpoonFlash = 0;
     state.player.x = 170;
-    state.player.y = H / 2;
+    state.player.y = L.mode === "platform" ? H - 56 : H / 2;
     state.player.vy = 0;
     state.squad = [];
     for (let i = 0; i < L.squad; i++) {
       state.squad.push({
-        x: 86 - i * 42,
-        y: state.player.y + (i % 2 ? 34 : -34),
+        x: L.mode === "platform" ? state.player.x - 54 - i * 42 : 86 - i * 42,
+        y: L.mode === "platform" ? state.player.y + state.player.h : state.player.y + (i % 2 ? 34 : -34),
         kick: 0,
         fire: 0
       });
+    }
+
+    if (L.mode === "platform") {
+      let platformX = 315;
+      let platformIndex = 0;
+      const platformHeights = [H - 94, H - 142, H - 190, H - 134];
+      while (platformX < L.length - 820) {
+        const width = 128 + Math.floor(random() * 76);
+        const y = platformHeights[platformIndex % platformHeights.length];
+        state.ents.push({ type: "platform", x: platformX, y, w: width, h: 24, alive: true });
+        state.tokensTotal++;
+        state.ents.push({
+          type: "api-token",
+          x: platformX + width * 0.5 - 11,
+          y: y - 42,
+          w: 22, h: 22,
+          value: 60,
+          alive: true
+        });
+        if (platformIndex % 2 === 1) {
+          state.ents.push({ type: "pit", x: platformX + width + 42, y: H - 42, w: 74, h: 26, alive: true });
+        }
+        platformX += width + 105 + Math.floor(random() * 30);
+        platformIndex++;
+      }
     }
 
     if (L.cannons) {
@@ -1123,14 +1207,18 @@
     }
 
     if (L.bugs) {
-      for (let i = 0; i < 8 + state.level * 2; i++) {
+      const bugCount = L.mode === "shooter" ? 26 : 8 + state.level * 2;
+      const bugSpacing = L.mode === "shooter" ? 155 : 280;
+      for (let i = 0; i < bugCount; i++) {
         const kind = i % 3;
         state.ents.push({
           type: "bug", kind,
-          x: 500 + i * 280 + random() * 80,
-          y: 80 + random() * (H - 160),
-          w: 40, h: 30,
+          x: 500 + i * bugSpacing + random() * 70,
+          y: 70 + random() * (H - 140),
+          w: L.mode === "shooter" ? 46 : 40, h: L.mode === "shooter" ? 34 : 30,
           vy: (random() < 0.5 ? -1 : 1) * (0.8 + random()),
+          gunner: L.mode === "shooter",
+          fireTimer: L.mode === "shooter" ? 55 + Math.floor(random() * 70) : 0,
           alive: true
         });
       }
@@ -1210,6 +1298,25 @@
 
   function flap() {
     if (state.mode !== "play" && state.mode !== "bonus") return;
+    if (state.mode === "play" && LEVELS[state.level].mode === "platform") {
+      if (state.jumpCount >= 3) return;
+      const jumpNumber = state.jumpCount + 1;
+      state.player.vy = jumpNumber === 1 ? LEVELS[state.level].flap : LEVELS[state.level].flap * 0.86;
+      state.jumpCount = jumpNumber;
+      state.grounded = false;
+      state.kick = 8;
+      audio.flap();
+      burst(state.player.x + 28, state.player.y + state.player.h, "#7fd7ff", 5);
+      if (jumpNumber > 1) {
+        addScoreEffect(
+          state.player.x + state.player.w / 2,
+          state.player.y - 5,
+          jumpNumber === 2 ? "DOUBLE JUMP" : "TRIPLE JUMP",
+          jumpNumber === 2 ? "#7fd7ff" : "#f0d060"
+        );
+      }
+      return;
+    }
     state.player.vy = state.mode === "bonus" ? -5.9 : LEVELS[state.level].flap;
     state.kick = 8;
     audio.flap();
@@ -1218,6 +1325,42 @@
       y: state.player.y + 20,
       vy: -0.8, life: 40
     });
+  }
+
+  function fireShooter() {
+    if (state.mode !== "play" || LEVELS[state.level].mode !== "shooter" || state.shooterCooldown > 0) return;
+    const p = state.player;
+    state.shooterCooldown = 8;
+    state.ents.push({
+      type: "player-bullet",
+      x: p.x + p.w - 2,
+      y: p.y + p.h / 2 - 3,
+      w: 18, h: 6,
+      vx: 11,
+      life: 100,
+      playerShot: true,
+      alive: true
+    });
+    audio.shot();
+  }
+
+  function fireHarpoon() {
+    if (state.mode !== "play" || LEVELS[state.level].mode !== "platform" || state.harpoonCooldown > 0) return;
+    const p = state.player;
+    state.harpoonCooldown = 22;
+    state.harpoonFlash = 10;
+    state.ents.push({
+      type: "harpoon",
+      x: p.x + p.w - 1,
+      y: p.y + (state.dodgeTimer > 0 ? 23 : 11),
+      w: 34, h: 8,
+      vx: 12,
+      life: 70,
+      playerShot: true,
+      alive: true
+    });
+    audio.shot();
+    burst(p.x + p.w + 2, p.y + 17, "#7fd7ff", 4);
   }
 
   function trabajeen() {
@@ -1357,7 +1500,7 @@
       }
       if (["shark", "bug", "cannon", "bolt"].includes(entity.type)) entity.alive = false;
     }
-    banner(boss.config.name + " BOSS · T TO FIRE");
+    banner(boss.config.name + " BOSS · " + (LEVELS[state.level].mode === "shooter" ? "SPACE TO FIRE · T SALVO" : "T TO FIRE"));
   }
 
   function updateBoss(boss, playerHitbox) {
@@ -1725,20 +1868,72 @@
     const L = LEVELS[state.level];
     const p = state.player;
     const scroll = state.bossActive ? 0 : L.speed;
+    const previousPlayerY = p.y;
 
-    if (KEY.Space || KEY.ArrowUp || KEY.Pointer) {
-      flap();
-      KEY.Space = KEY.ArrowUp = KEY.Pointer = false;
+    if (L.mode === "shooter") {
+      const horizontal = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
+      const vertical = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
+      p.x += horizontal * 4.2;
+      p.y += vertical * 4.2;
+      if (POINTER.active) {
+        p.x += Math.max(-5, Math.min(5, (POINTER.x - (p.x + p.w / 2)) * 0.16));
+        p.y += Math.max(-5, Math.min(5, (POINTER.y - (p.y + p.h / 2)) * 0.16));
+      }
+      p.x = Math.max(78, Math.min(390, p.x));
+      p.y = Math.max(44, Math.min(H - 64, p.y));
+      p.vy = vertical * 4.2;
+      if (state.shooterCooldown > 0) state.shooterCooldown--;
+      if (KEY.Space || KEY.Pointer || POINTER.active) fireShooter();
+      KEY.Pointer = false;
+    } else {
+      if (L.mode === "platform") {
+        if (state.dodgeCooldown > 0) state.dodgeCooldown--;
+        if (state.harpoonCooldown > 0) state.harpoonCooldown--;
+        if (state.harpoonFlash > 0) state.harpoonFlash--;
+        if (state.grounded && (KEY.ArrowDown || KEY.KeyS) && state.dodgeCooldown <= 0) {
+          state.dodgeTimer = 22;
+          state.dodgeCooldown = 52;
+          burst(p.x + 18, p.y + p.h, "#7fd7ff", 5);
+        }
+        const horizontal = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
+        if (state.dodgeTimer > 0) {
+          state.dodgeTimer--;
+          p.x += 3.1;
+        } else {
+          p.x += horizontal * 3.8;
+        }
+        p.x = Math.max(78, Math.min(390, p.x));
+        if (KEY.KeyX || KEY.KeyF) {
+          fireHarpoon();
+          KEY.KeyX = KEY.KeyF = false;
+        }
+      }
+      if (state.dodgeTimer <= 0 && (KEY.Space || KEY.ArrowUp || KEY.KeyW || KEY.Pointer)) {
+        flap();
+        KEY.Space = KEY.ArrowUp = KEY.KeyW = KEY.Pointer = false;
+      } else if (state.dodgeTimer > 0) {
+        KEY.Space = KEY.ArrowUp = KEY.KeyW = KEY.Pointer = false;
+      }
+      state.grounded = false;
+      p.vy += L.gravity;
+      p.y += p.vy;
+      if (p.y < 36) { p.y = 36; p.vy = 0; }
+      if (p.y > H - 56) {
+        p.y = H - 56;
+        if (L.mode === "platform") {
+          p.vy = 0;
+          state.grounded = true;
+          state.jumpCount = 0;
+        } else {
+          damage("SEA FLOOR");
+          p.vy = -3;
+        }
+      }
     }
     if (KEY.KeyT) {
       trabajeen();
       KEY.KeyT = false;
     }
-
-    p.vy += L.gravity;
-    p.y += p.vy;
-    if (p.y < 36) { p.y = 36; p.vy = 0; }
-    if (p.y > H - 56) { p.y = H - 56; damage("SEA FLOOR"); p.vy = -3; }
 
     state.dist += scroll;
     const distanceVested = Math.min(Math.floor(state.dist / VESTING_DISTANCE_STEP), Math.floor(L.length / VESTING_DISTANCE_STEP));
@@ -1762,18 +1957,18 @@
     state.effects = state.effects.filter((effect) => effect.life > 0);
 
     state.squad.forEach((s, i) => {
-      const tx = p.x - 74 - i * 40;
-      const ty = p.y + (i % 2 ? 36 : -34);
+      const tx = L.mode === "platform" ? p.x - 54 - i * 42 : p.x - 74 - i * 40;
+      const ty = L.mode === "platform" ? p.y + p.h : p.y + (i % 2 ? 36 : -34);
       s.x += (tx - s.x) * 0.12;
       s.y += (ty - s.y) * 0.12;
       s.kick = (state.t + i * 4) % 12 < 6 ? 1 : 0;
       if (s.fire > 0) s.fire--;
-      if ((state.t + i * 9) % 38 === 0) {
+      if (L.mode !== "platform" && (state.t + i * 9) % 38 === 0) {
         state.bubbles.push({ x: s.x - 20, y: s.y + 20, vy: -0.55, life: 34 });
       }
     });
 
-    if (state.t % 16 === 0) {
+    if (L.mode !== "platform" && state.t % 16 === 0) {
       state.bubbles.push({
         x: p.x + 8,
         y: p.y + 18,
@@ -1786,7 +1981,9 @@
     for (const pt of state.parts) { pt.x += pt.vx - L.speed * 0.4; pt.y += pt.vy; pt.life--; }
     state.parts = state.parts.filter((pt) => pt.life > 0);
 
-    const hitbox = { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
+    const hitbox = state.dodgeTimer > 0 && L.mode === "platform"
+      ? { x: p.x + 9, y: p.y + 23, w: p.w - 18, h: 12 }
+      : { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
     const connectorPickup = connectorPickupBox(p);
     let activeBolts = state.ents.filter((entity) => entity.type === "bolt" && entity.alive).length;
 
@@ -1841,10 +2038,81 @@
       if (e.type === "bug" && e.alive) {
         e.y += e.vy;
         if (e.y < 50 || e.y > H - 70) e.vy *= -1;
-        if (aabb(hitbox, e)) damage("SEA CREATURE");
+        if (e.gunner && e.x > 430 && e.x < W - 30 && --e.fireTimer <= 0 && activeBolts < 6) {
+          const dx = p.x - e.x;
+          const dy = p.y - e.y;
+          const distance = Math.hypot(dx, dy) || 1;
+          state.ents.push({
+            type: "bolt",
+            x: e.x - 8, y: e.y + e.h / 2,
+            w: 12, h: 7,
+            vx: dx / distance * 4.4,
+            vy: dy / distance * 4.4,
+            gunnerShot: true,
+            alive: true
+          });
+          activeBolts++;
+          e.fireTimer = 75 + (Math.abs(Math.floor(e.x)) % 55);
+        }
+        if (aabb(hitbox, e)) {
+          const stomped = L.mode === "platform" && p.vy > 1 && previousPlayerY + p.h <= e.y + 12;
+          if (stomped) {
+            e.alive = false;
+            p.vy = -6.4;
+            state.jumpCount = 1;
+            state.score += 100;
+            state.stats.kills++;
+            addScoreEffect(e.x + e.w / 2, e.y, "STOMP +100", "#f0d060");
+            burst(e.x + e.w / 2, e.y + e.h / 2, "#7fd7ff", 10);
+            audio.boom();
+          } else damage("SEA CREATURE");
+        }
       }
 
       if (e.type === "cannon" && e.alive && aabb(hitbox, e)) damage("CANNON");
+
+      if (e.type === "platform" && e.alive && p.vy >= 0) {
+        const previousBottom = previousPlayerY + p.h;
+        const currentBottom = p.y + p.h;
+        const overlapsX = p.x + p.w - 14 > e.x && p.x + 14 < e.x + e.w;
+        if (overlapsX && previousBottom <= e.y + 6 && currentBottom >= e.y) {
+          p.y = e.y - p.h;
+          p.vy = 0;
+          state.grounded = true;
+          state.jumpCount = 0;
+        }
+      }
+
+      if (e.type === "pit" && e.alive && L.mode === "platform") {
+        const feet = { x: p.x + 14, y: p.y + p.h - 3, w: p.w - 28, h: 12 };
+        if (aabb(feet, e)) {
+          damage("ROUTE PIT");
+          p.vy = -7.2;
+          state.grounded = false;
+          state.jumpCount = 1;
+        }
+      }
+
+      if (e.type === "api-token" && e.alive && aabb(connectorPickup, e)) {
+        e.alive = false;
+        state.tokensCollected++;
+        state.score += e.value;
+        state.vested += 10;
+        addScoreEffect(e.x + e.w / 2, e.y, "+" + e.value, "#f0d060");
+        burst(e.x + e.w / 2, e.y + e.h / 2, "#f0d060", 8);
+        audio.link();
+      }
+
+      if ((e.type === "player-bullet" || e.type === "harpoon") && e.alive) {
+        e.x += e.vx;
+        e.life--;
+        const target = state.ents.find((candidate) =>
+          candidate !== e && candidate.alive && isRocketTarget(candidate) &&
+          !(candidate.type === "boss" && candidate.hitCooldown > 0) && aabb(e, candidate)
+        );
+        if (target) rocketHit(e, target);
+        if (e.x > W + 50 || e.life <= 0) e.alive = false;
+      }
 
       if (e.type === "bolt" && e.alive) {
         e.x += e.vx;
@@ -1958,6 +2226,37 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
+    if (L.mode === "platform" && SPR.level4.background) {
+      const background = SPR.level4.background;
+      const drawHeight = H;
+      const drawWidth = background.width / background.height * drawHeight;
+      const offset = ((state.dist * 0.065) % drawWidth + drawWidth) % drawWidth;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 0.86;
+      ctx.drawImage(background, -offset, 0, drawWidth, drawHeight);
+      ctx.drawImage(background, drawWidth - offset, 0, drawWidth, drawHeight);
+      ctx.globalAlpha = 1;
+      const depthShade = ctx.createLinearGradient(0, 0, 0, H);
+      depthShade.addColorStop(0, "rgba(2, 18, 31, 0.08)");
+      depthShade.addColorStop(0.55, "rgba(2, 18, 31, 0.2)");
+      depthShade.addColorStop(1, "rgba(1, 9, 17, 0.46)");
+      ctx.fillStyle = depthShade;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+
+      ctx.fillStyle = "#06131c";
+      ctx.fillRect(0, H - 16, W, 16);
+      ctx.fillStyle = L.accent;
+      ctx.globalAlpha = 0.32;
+      for (let i = 0; i < 20; i++) {
+        const x = ((i * 90 - state.dist * 0.8) % (W + 90));
+        ctx.fillRect(x, H - 16, 40, 6);
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+
     ctx.save();
     ctx.globalAlpha = 0.07;
     for (let i = 0; i < 6; i++) {
@@ -2051,6 +2350,47 @@
     }
     ctx.restore();
 
+    if (L.mode === "platform") {
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      for (let i = 0; i < 7; i++) {
+        const x = ((i * 190 - state.dist * 0.5) % (W + 220)) - 70;
+        const pipeHeight = 45 + (i % 3) * 22;
+        ctx.fillStyle = "#0d4454";
+        ctx.fillRect(x, H - 16 - pipeHeight, 54, pipeHeight);
+        ctx.fillStyle = "#39a1a5";
+        ctx.fillRect(x - 6, H - 22 - pipeHeight, 66, 13);
+        ctx.fillStyle = "#7fd7ff";
+        ctx.fillRect(x + 7, H - 13 - pipeHeight, 7, pipeHeight - 4);
+      }
+      ctx.restore();
+    } else if (L.mode === "shooter") {
+      ctx.save();
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = "#2a160d";
+      const canyonOffset = ((state.dist * 0.42) % 260 + 260) % 260;
+      for (let x = -260 - canyonOffset; x < W + 260; x += 260) {
+        ctx.beginPath();
+        ctx.moveTo(x, H - 16);
+        ctx.lineTo(x + 32, H - 136);
+        ctx.lineTo(x + 92, H - 136);
+        ctx.lineTo(x + 112, H - 74);
+        ctx.lineTo(x + 176, H - 74);
+        ctx.lineTo(x + 212, H - 16);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(237, 201, 93, 0.32)";
+      ctx.setLineDash([14, 18]);
+      for (let y = 110; y < H - 40; y += 78) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     ctx.fillStyle = "#07141c";
     ctx.fillRect(0, H - 16, W, 16);
     ctx.fillStyle = L.accent;
@@ -2137,15 +2477,47 @@
     } else if (e.type === "bug" && e.alive) {
       const sprite = SPR.bugs[e.kind];
       const frame = (state.t >> 4) % 2;
-      const fit = Math.min((e.w + 4) / sprite.sw, (e.h + 4) / sprite.sh);
-      const drawW = sprite.sw * fit * (frame ? 0.98 : 1);
-      const drawH = sprite.sh * fit * (frame ? 1 : 0.98);
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.translate(e.x + e.w / 2, e.y + e.h / 2 + (frame ? 1 : -1));
-      ctx.scale(-1, 1);
-      ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, -drawW / 2, -drawH / 2, drawW, drawH);
-      ctx.restore();
+      const gunnerSheet = e.gunner && SPR.level5.gunner;
+      if (gunnerSheet) {
+        const cell = gunnerSheet.height;
+        const gunnerFrame = e.fireTimer < 18 ? 2 : frame;
+        const sourceX = gunnerFrame * cell + 42;
+        const sourceY = 155;
+        const sourceW = cell - 74;
+        const sourceH = 390;
+        const drawW = e.w + 38;
+        const drawH = e.h + 18;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          gunnerSheet,
+          sourceX, sourceY, sourceW, sourceH,
+          e.x + e.w / 2 - drawW / 2,
+          e.y + e.h / 2 - drawH / 2 + (frame ? 1 : -1),
+          drawW, drawH
+        );
+        ctx.restore();
+      } else {
+        const fit = Math.min((e.w + 4) / sprite.sw, (e.h + 4) / sprite.sh);
+        const drawW = sprite.sw * fit * (frame ? 0.98 : 1);
+        const drawH = sprite.sh * fit * (frame ? 1 : 0.98);
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(e.x + e.w / 2, e.y + e.h / 2 + (frame ? 1 : -1));
+        ctx.scale(-1, 1);
+        ctx.drawImage(sprite.image, sprite.sx, sprite.sy, sprite.sw, sprite.sh, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.restore();
+      }
+      if (e.gunner && !gunnerSheet) {
+        ctx.fillStyle = "#28170d";
+        ctx.fillRect(e.x - 9, e.y + e.h / 2 - 3, 17, 7);
+        ctx.fillStyle = "#edc95d";
+        ctx.fillRect(e.x - 10, e.y + e.h / 2 - 1, 12, 3);
+        if (e.fireTimer < 18) {
+          ctx.fillStyle = e.fireTimer % 6 < 3 ? "#fff0a8" : "#ef6a4c";
+          ctx.fillRect(e.x - 15, e.y + e.h / 2 - 3, 5, 7);
+        }
+      }
       const label = BUGS[e.kind].short;
       ctx.font = "bold 7px monospace";
       const labelWidth = ctx.measureText(label).width;
@@ -2172,6 +2544,106 @@
         ctx.fillRect(e.x + 2, e.y + 2, 5, 3);
         ctx.fillRect(e.x + e.w - 7, e.y + e.h - 7, 5, 3);
       }
+      ctx.restore();
+    } else if (e.type === "platform" && e.alive) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      if (SPR.level4.platform) {
+        ctx.beginPath();
+        ctx.rect(e.x - 2, e.y - 3, e.w + 4, 39);
+        ctx.clip();
+        const moduleWidth = 102;
+        for (let x = e.x - 2; x < e.x + e.w; x += moduleWidth - 4) {
+          ctx.drawImage(SPR.level4.platform, 250, 185, 1540, 355, x, e.y - 3, moduleWidth, 31);
+        }
+      } else {
+        ctx.fillStyle = "#071923";
+        ctx.fillRect(e.x - 3, e.y - 3, e.w + 6, e.h + 6);
+        for (let x = e.x; x < e.x + e.w; x += 28) {
+          const width = Math.min(27, e.x + e.w - x);
+          ctx.fillStyle = "#187287";
+          ctx.fillRect(x, e.y, width, e.h);
+          ctx.fillStyle = "#62c4c3";
+          ctx.fillRect(x + 2, e.y + 2, Math.max(0, width - 4), 4);
+          ctx.fillStyle = "#0c4051";
+          ctx.fillRect(x + 3, e.y + 10, Math.max(0, width - 6), e.h - 13);
+          ctx.fillStyle = "#f0d060";
+          ctx.fillRect(x + Math.max(4, width / 2 - 2), e.y + 13, 4, 4);
+        }
+      }
+      ctx.restore();
+    } else if (e.type === "pit" && e.alive) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      if (SPR.level4.spikes) {
+        ctx.drawImage(SPR.level4.spikes, 245, 86, 1565, 500, e.x, e.y - 2, e.w, e.h + 6);
+      } else {
+        ctx.fillStyle = "#010508";
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.fillStyle = "#ff6f61";
+        for (let x = e.x + 4; x < e.x + e.w - 4; x += 14) {
+          ctx.beginPath();
+          ctx.moveTo(x, e.y + 12);
+          ctx.lineTo(x + 6, e.y);
+          ctx.lineTo(x + 12, e.y + 12);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    } else if (e.type === "api-token" && e.alive) {
+      ctx.save();
+      const pulse = reducedMotion ? 1 : 1 + Math.sin(state.t * 0.12 + e.x * 0.01) * 0.08;
+      ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+      ctx.scale(pulse, pulse);
+      ctx.imageSmoothingEnabled = false;
+      if (SPR.level4.token) {
+        ctx.drawImage(SPR.level4.token, 410, 150, 715, 715, -20, -20, 40, 40);
+      } else {
+        ctx.fillStyle = "#6f5310";
+        ctx.fillRect(-11, -11, 22, 22);
+        ctx.fillStyle = "#f0d060";
+        ctx.fillRect(-8, -8, 16, 16);
+        ctx.fillStyle = "#fff1a8";
+        ctx.fillRect(-5, -6, 4, 4);
+        ctx.fillStyle = "#604812";
+        ctx.font = "bold 17px 'VT323', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("$", 0, 6);
+      }
+      ctx.restore();
+      ctx.textAlign = "left";
+    } else if (e.type === "harpoon" && e.alive) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = "#7fd7ff";
+      ctx.fillRect(e.x - 13, e.y + 2, 17, 4);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#d9f2f5";
+      ctx.fillRect(e.x + 5, e.y + 3, 22, 2);
+      ctx.fillStyle = "#5da6b8";
+      ctx.fillRect(e.x + 3, e.y + 5, 24, 2);
+      ctx.fillStyle = "#f0d060";
+      ctx.fillRect(e.x, e.y + 2, 7, 6);
+      ctx.fillStyle = "#e8f4f6";
+      ctx.beginPath();
+      ctx.moveTo(e.x + e.w, e.y + e.h / 2);
+      ctx.lineTo(e.x + e.w - 9, e.y);
+      ctx.lineTo(e.x + e.w - 7, e.y + e.h / 2);
+      ctx.lineTo(e.x + e.w - 9, e.y + e.h);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else if (e.type === "player-bullet" && e.alive) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#fff0a0";
+      ctx.fillRect(e.x - 13, e.y + 1, 14, 4);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#fff7d1";
+      ctx.fillRect(e.x, e.y, e.w, e.h);
+      ctx.fillStyle = "#edc95d";
+      ctx.fillRect(e.x + 2, e.y + 1, e.w - 4, e.h - 2);
       ctx.restore();
     } else if (e.type === "bolt" && e.alive) {
       ctx.save();
@@ -2247,6 +2719,35 @@
     const p = state.player;
     const blinking = state.invuln > 0 && state.t % 6 < 2;
 
+    if (LEVELS[state.level]?.mode === "platform" && SPR.level4.runner) {
+      const useActionSheet = SPR.level4.actions && (state.dodgeTimer > 0 || !state.grounded || state.harpoonFlash > 0);
+      const sheet = useActionSheet ? SPR.level4.actions : SPR.level4.runner;
+      const cell = sheet.height;
+      const frame = state.dodgeTimer > 0 ? 1
+        : !state.grounded ? 0
+          : state.harpoonFlash > 0 ? 2
+            : Math.floor(state.t / 5) % 3;
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h);
+      ctx.imageSmoothingEnabled = false;
+      if (!blinking) {
+        ctx.drawImage(
+          sheet,
+          frame * cell + 28, 24, cell - 48, 665,
+          -42, -74, 84, 74
+        );
+      }
+      if (state.invuln > 0) {
+        ctx.strokeStyle = "rgba(255, 64, 64, " + (state.invuln / 70) + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -34, 42, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     const tilt = Math.max(-0.35, Math.min(0.4, p.vy * 0.045));
@@ -2303,21 +2804,66 @@
 
   function drawSquad() {
     state.squad.forEach((s, idx) => {
+      if (LEVELS[state.level]?.mode === "platform") {
+        if (SPR.level4.companions?.length) {
+          const sheet = SPR.level4.companions[idx % SPR.level4.companions.length];
+          const cell = sheet.height;
+          const frame = state.grounded ? Math.floor((state.t + idx * 4) / 6) % 2 : 2;
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(
+            sheet,
+            frame * cell + 34, 22, cell - 68, 665,
+            Math.round(s.x - 29), Math.round(s.y - 60), 58, 60
+          );
+          ctx.restore();
+        } else {
+          const accent = ["#19c9e6", "#f2a900", "#ef6a4c"][idx % 3];
+          const stride = state.grounded ? Math.sin((state.t + idx * 5) * 0.55) * 0.48 : 0;
+          ctx.save();
+          ctx.translate(Math.round(s.x), Math.round(s.y));
+          ctx.fillStyle = "#a9bac5";
+          ctx.fillRect(-13, -43, 8, 20);
+          ctx.fillStyle = "#152431";
+          ctx.fillRect(-9, -38, 20, 24);
+          ctx.fillStyle = accent;
+          ctx.fillRect(-6, -35, 4, 17);
+          disc(ctx, 5, -47, 9, "#d9a27f");
+          ctx.fillStyle = "#14202a";
+          ctx.fillRect(-2, -56, 14, 7);
+          for (const side of [-1, 1]) {
+            ctx.save();
+            ctx.translate(side * 4, -15);
+            ctx.rotate(state.grounded ? stride * side : side * 0.45);
+            ctx.fillStyle = "#132333";
+            ctx.fillRect(-4, 0, 8, 19);
+            ctx.fillStyle = accent;
+            ctx.fillRect(-4, 15, 11, 5);
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+        return;
+      }
       drawSidekick(ctx, s.x, s.y, state.t, s.fire, idx);
     });
   }
 
   function drawDebugHitboxes() {
     const p = state.player;
+    const platformDodge = LEVELS[state.level]?.mode === "platform" && state.dodgeTimer > 0;
+    const playerBox = platformDodge
+      ? { x: p.x + 9, y: p.y + 23, w: p.w - 18, h: 12 }
+      : { x: p.x + 12, y: p.y + 8, w: p.w - 24, h: p.h - 14 };
     ctx.save();
     ctx.lineWidth = 1;
     ctx.strokeStyle = "#ff5577";
-    ctx.strokeRect(p.x + 12 + 0.5, p.y + 8 + 0.5, p.w - 24, p.h - 14);
+    ctx.strokeRect(playerBox.x + 0.5, playerBox.y + 0.5, playerBox.w, playerBox.h);
     const pickup = connectorPickupBox(p);
     ctx.strokeStyle = "#66e0ff";
     ctx.strokeRect(pickup.x + 0.5, pickup.y + 0.5, pickup.w, pickup.h);
     for (const e of state.ents) {
-      if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt", "boss"].includes(e.type)) continue;
+      if (!e.alive || !["shark", "bug", "connector", "cannon", "bolt", "boss", "platform", "pit", "api-token", "player-bullet", "harpoon"].includes(e.type)) continue;
       ctx.strokeStyle = e.type === "connector" ? "#7fd7ff" : "#ffe680";
       ctx.strokeRect(e.x + 0.5, e.y + 0.5, e.w, e.h);
     }
@@ -2360,7 +2906,7 @@
       ctx.fillText(L.name, W / 2, 257);
       ctx.fillStyle = "#a9cbd7";
       ctx.font = "23px 'VT323', monospace";
-      ctx.fillText(L.sub, W / 2, 301);
+      ctx.fillText(L.sub, W / 2, 301, 820);
       ctx.fillStyle = "#f0d060";
       ctx.font = "18px 'VT323', monospace";
       ctx.fillText("GET READY", W / 2, 328);
@@ -2418,12 +2964,36 @@
       ctx.fillText(DEV.godMode ? "DEV · GOD" : "DEV RUN", 10, 50);
     }
 
+    if (L.mode && !state.bossActive) {
+      const modeText = L.mode === "platform"
+        ? "ARROWS MOVE  ·  SPACE ×3 JUMP  ·  DOWN DODGE  ·  X HARPOON"
+        : "ARCADE SALVO  ·  ARROWS / DRAG MOVE  ·  SPACE FIRE";
+      const badgeWidth = L.mode === "platform" ? 500 : 410;
+      ctx.fillStyle = "rgba(4, 16, 24, 0.82)";
+      ctx.fillRect(W / 2 - badgeWidth / 2, 44, badgeWidth, 25);
+      ctx.strokeStyle = L.accent;
+      ctx.strokeRect(W / 2 - badgeWidth / 2 + 0.5, 44.5, badgeWidth - 1, 24);
+      ctx.fillStyle = L.accent;
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(modeText, W / 2, 61);
+      ctx.textAlign = "left";
+    }
+
     if (L.connectors) {
       ctx.fillStyle = "#7fd7ff";
       ctx.font = "16px 'VT323', monospace";
       ctx.fillText(
         "LINKS " + state.linked + "/" + state.needLink +
         " · OPTIONAL · +$80 EACH AT GATE",
+        10,
+        H - 12
+      );
+    } else if (L.mode === "platform") {
+      ctx.fillStyle = "#f0d060";
+      ctx.font = "16px 'VT323', monospace";
+      ctx.fillText(
+        "TOKENS " + state.tokensCollected + "/" + state.tokensTotal + " · COLLECT, SURVIVE, REACH THE GATE",
         10,
         H - 12
       );
@@ -2506,6 +3076,23 @@
     drawSquad();
     drawHero();
 
+    if (LEVELS[state.level].mode === "shooter" && !state.bossActive) {
+      const aimX = state.player.x + 154;
+      const aimY = state.player.y + state.player.h / 2;
+      ctx.save();
+      ctx.globalAlpha = reducedMotion ? 0.42 : 0.32 + Math.sin(state.t * 0.14) * 0.1;
+      ctx.strokeStyle = "#edc95d";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(aimX, aimY, 12, 0, Math.PI * 2);
+      ctx.moveTo(aimX - 18, aimY); ctx.lineTo(aimX - 6, aimY);
+      ctx.moveTo(aimX + 6, aimY); ctx.lineTo(aimX + 18, aimY);
+      ctx.moveTo(aimX, aimY - 18); ctx.lineTo(aimX, aimY - 6);
+      ctx.moveTo(aimX, aimY + 6); ctx.lineTo(aimX, aimY + 18);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (state.shoutText > 0) {
       const p = state.player;
       ctx.fillStyle = "#f4f7fb";
@@ -2569,7 +3156,8 @@
       ctx.fillStyle = "#ffe680";
       ctx.font = "12px 'Press Start 2P', monospace";
       ctx.textAlign = "center";
-      ctx.fillText(state.banner, W / 2, state.bossActive ? 112 : 64);
+      const bannerY = state.bossActive ? 112 : LEVELS[state.level].mode ? 92 : 64;
+      ctx.fillText(state.banner, W / 2, bannerY);
       ctx.textAlign = "left";
       ctx.globalAlpha = 1;
     }
@@ -2579,7 +3167,7 @@
       ctx.fillStyle = "#e4f3f8";
       ctx.font = "20px 'VT323', monospace";
       ctx.textAlign = "center";
-      ctx.fillText(LEVELS[state.level].sub, W / 2, 91);
+      ctx.fillText(LEVELS[state.level].sub, W / 2, LEVELS[state.level].mode ? 121 : 91, 850);
       ctx.textAlign = "left";
       ctx.globalAlpha = 1;
     }
@@ -2940,7 +3528,7 @@
     ctx.font = "26px 'VT323', monospace";
     ctx.fillText("Dodge hazards. Defeat six bosses.", 380, 229);
     ctx.fillText("Link every connector to unlock CRM SURGE.", 380, 258);
-    [["SPACE / CLICK", "FLAP"], ["T", "TRABAJEEEN"], ["P / ESC", "PAUSE"]].forEach((item, index) => {
+    [["SPACE / CLICK", "ACTION"], ["T", "POWER / SALVO"], ["P / ESC", "PAUSE"]].forEach((item, index) => {
       const x = 380 + index * 148;
       ctx.fillStyle = "#143747";
       ctx.fillRect(x, 292, 132, 43);
@@ -3026,6 +3614,7 @@
     accumulator = 0;
     if (document.hidden) {
       KEY.Space = KEY.ArrowUp = KEY.Pointer = KEY.KeyT = false;
+      POINTER.active = false;
       if (["play", "bonus"].includes(state.mode)) {
         state.pausedFrom = state.mode;
         state.mode = "paused";
@@ -3067,5 +3656,8 @@
   }
 
   updateControlLabels();
+  if (DEV.enabled && Number.isInteger(DEV.startLevel) && DEV.startLevel >= 1 && DEV.startLevel <= LEVELS.length) {
+    startGame(false, undefined, createRunSeed(), { devRun: true, startLevel: DEV.startLevel - 1 });
+  }
   requestAnimationFrame(frame);
 })();
