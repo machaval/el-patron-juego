@@ -118,7 +118,8 @@
       buttons.pause.setAttribute("aria-label", state.mode === "paused" ? "Resume game" : "Pause game");
     }
     if (buttons.shout) {
-      buttons.shout.hidden = ["title", "level-transition", "dead", "win", "bonus"].includes(state.mode);
+      buttons.shout.hidden = ["title", "level-transition", "dead", "win", "bonus"].includes(state.mode) ||
+        (LEVELS[state.level]?.mode === "shooter" && !LEVELS[state.level]?.squad);
       buttons.shout.textContent = LEVELS[state.level]?.mode === "shooter" ? "SALVO" : "TRABAJEEEN";
       buttons.shout.setAttribute("aria-label", LEVELS[state.level]?.mode === "shooter" ? "Launch squad salvo" : "Use Trabajeen");
     }
@@ -239,11 +240,17 @@
   loadEnemyImage("assets/level4/hero-runner-harpoon-v2.png", (image) => { SPR.level4.runner = image; });
   loadEnemyImage("assets/level4/hero-actions-harpoon.png", (image) => { SPR.level4.actions = image; });
   loadEnemyImage("assets/level4/companion-runner-strip.png", (image) => {
-    SPR.level4.companions = [image, image, image];
+    SPR.level4.companionActions = [image, image, image];
+  });
+  loadEnemyImage("assets/level4/companion-walk-v2.png", (image) => {
+    SPR.level4.companionWalkers = [image, image, image];
   });
   loadEnemyImage("assets/level4/api-city-background.png", (image) => { SPR.level4.background = image; });
   loadEnemyImage("assets/level4/api-spike-trap.png", (image) => { SPR.level4.spikes = image; });
   loadEnemyImage("assets/level5/cowboy-gunner-strip.png", (image) => { SPR.level5.gunner = image; });
+  loadEnemyImage("assets/level5/hero-topdown-harpoon-v2.png", (image) => { SPR.level5.hero = image; });
+  loadEnemyImage("assets/level5/enemies-topdown.png", (image) => { SPR.level5.enemies = image; });
+  loadEnemyImage("assets/level5/frontier-route-topdown.png", (image) => { SPR.level5.background = image; });
   SPR.lifeIcon = makeCanvas(40, 40, (g) => {
     g.fillStyle = "#00a1e0";
     g.beginPath();
@@ -774,25 +781,25 @@
     },
     {
       name: "MULE 4 ABYSS",
-      sub: "ARCADE SALVO · ARROWS/WASD or drag to move. SPACE fires. T launches a salvo.",
+      sub: "TOP-DOWN HARPOON RUN · Move upward, destroy the outlaws, and survive the route.",
       story: [
         "Beyond Kong's platform lies a frontier crossfire.",
-        "TIBCO has armed the Mule 4 Abyss with roaming",
-        "gunners. The squad must shoot a route through."
+        "TIBCO has armed the Mule 4 Abyss with crab, eel,",
+        "and puffer outlaws. The harpoon opens the route."
       ],
       mode: "shooter",
       sky: ["#4b2b1b", "#8b542e", "#21120c"],
       accent: "#edc95d",
       length: 5400,
-      speed: 3.8,
+      speed: 3.45,
       gravity: 0.36,
       flap: -6.1,
       cannons: false,
       bugs: true,
-      connectors: 8,
-      squad: 4,
+      connectors: 0,
+      squad: 0,
       killN: 12,
-      shouts: 6,
+      shouts: 0,
       fire: false
     },
     {
@@ -981,7 +988,7 @@
     dodgeCooldown: 0,
     harpoonCooldown: 0,
     harpoonFlash: 0,
-    player: { x: 170, y: 240, vy: 0, w: 70, h: 38 },
+    player: { x: 170, y: 240, vy: 0, turn: 0, w: 70, h: 38 },
     squad: [],
     ents: [],
     parts: [],
@@ -1132,9 +1139,12 @@
     state.dodgeCooldown = 0;
     state.harpoonCooldown = 0;
     state.harpoonFlash = 0;
-    state.player.x = 170;
-    state.player.y = L.mode === "platform" ? H - 56 : H / 2;
+    state.player.w = L.mode === "shooter" ? 52 : 70;
+    state.player.h = L.mode === "shooter" ? 70 : 38;
+    state.player.x = L.mode === "shooter" ? W / 2 - state.player.w / 2 : 170;
+    state.player.y = L.mode === "shooter" ? H - 116 : L.mode === "platform" ? H - 56 : H / 2;
     state.player.vy = 0;
+    state.player.turn = 0;
     state.squad = [];
     for (let i = 0; i < L.squad; i++) {
       state.squad.push({
@@ -1208,15 +1218,16 @@
 
     if (L.bugs) {
       const bugCount = L.mode === "shooter" ? 26 : 8 + state.level * 2;
-      const bugSpacing = L.mode === "shooter" ? 155 : 280;
+      const bugSpacing = L.mode === "shooter" ? 168 : 280;
       for (let i = 0; i < bugCount; i++) {
         const kind = i % 3;
         state.ents.push({
           type: "bug", kind,
-          x: 500 + i * bugSpacing + random() * 70,
-          y: 70 + random() * (H - 140),
-          w: L.mode === "shooter" ? 46 : 40, h: L.mode === "shooter" ? 34 : 30,
+          x: L.mode === "shooter" ? 105 + random() * (W - 210) : 500 + i * bugSpacing + random() * 70,
+          y: L.mode === "shooter" ? -180 - i * bugSpacing - random() * 80 : 70 + random() * (H - 140),
+          w: L.mode === "shooter" ? 54 : 40, h: L.mode === "shooter" ? 54 : 30,
           vy: (random() < 0.5 ? -1 : 1) * (0.8 + random()),
+          strafe: (random() < 0.5 ? -1 : 1) * (0.45 + random() * 0.85),
           gunner: L.mode === "shooter",
           fireTimer: L.mode === "shooter" ? 55 + Math.floor(random() * 70) : 0,
           alive: true
@@ -1272,7 +1283,9 @@
       const bossHp = 3 + stage;
       state.boss = {
         type: "boss", config,
-        x: L.length - 350, y: H / 2 - config.h / 2, w: config.w, h: config.h,
+        x: L.mode === "shooter" ? W / 2 - config.w / 2 : L.length - 350,
+        y: L.mode === "shooter" ? -L.length + 650 : H / 2 - config.h / 2,
+        w: config.w, h: config.h,
         vy: 0.8 + stage * 0.12 + stage * stage * 0.04,
         shotSpeed: 4.2 + stage * 0.32,
         attackEvery: 112 - stage * 6,
@@ -1286,8 +1299,8 @@
 
     state.ents.push({
       type: "goal",
-      x: L.length - 175,
-      y: H / 2 - 88,
+      x: L.mode === "shooter" ? W / 2 - 72 : L.length - 175,
+      y: L.mode === "shooter" ? -L.length + 220 : H / 2 - 88,
       w: 144, h: 176,
       destination: state.level,
       alive: true
@@ -1330,18 +1343,29 @@
   function fireShooter() {
     if (state.mode !== "play" || LEVELS[state.level].mode !== "shooter" || state.shooterCooldown > 0) return;
     const p = state.player;
-    state.shooterCooldown = 8;
+    const angle = p.turn || 0;
+    const shotVx = Math.sin(angle) * 12;
+    const shotVy = -Math.cos(angle) * 12;
+    state.shooterCooldown = 9;
     state.ents.push({
-      type: "player-bullet",
-      x: p.x + p.w - 2,
-      y: p.y + p.h / 2 - 3,
-      w: 18, h: 6,
-      vx: 11,
+      type: "harpoon",
+      x: p.x + p.w / 2 + Math.sin(angle) * 34 - 4,
+      y: p.y + p.h / 2 - Math.cos(angle) * 49 - 17,
+      w: 8, h: 34,
+      vx: shotVx,
+      vy: shotVy,
+      vertical: true,
       life: 100,
       playerShot: true,
       alive: true
     });
     audio.shot();
+    burst(
+      p.x + p.w / 2 + Math.sin(angle) * 34,
+      p.y + p.h / 2 - Math.cos(angle) * 49,
+      "#7fd7ff",
+      4
+    );
   }
 
   function fireHarpoon() {
@@ -1489,8 +1513,8 @@
     state.bossActive = true;
     state.bossTime = 0;
     boss.attackTimer = boss.firstAttackDelay;
-    state.trabajeen = Math.max(state.trabajeen, 3);
-    if (!state.squad.length) {
+    if (LEVELS[state.level].mode !== "shooter") state.trabajeen = Math.max(state.trabajeen, 3);
+    if (LEVELS[state.level].mode !== "shooter" && !state.squad.length) {
       state.squad.push({ x: 90, y: state.player.y - 30, kick: 0, fire: 0 });
     }
     for (const entity of state.ents) {
@@ -1500,18 +1524,25 @@
       }
       if (["shark", "bug", "cannon", "bolt"].includes(entity.type)) entity.alive = false;
     }
-    banner(boss.config.name + " BOSS · " + (LEVELS[state.level].mode === "shooter" ? "SPACE TO FIRE · T SALVO" : "T TO FIRE"));
+    banner(boss.config.name + " BOSS · " + (LEVELS[state.level].mode === "shooter" ? "SPACE TO FIRE HARPOONS" : "T TO FIRE"));
   }
 
   function updateBoss(boss, playerHitbox) {
     if (!state.bossActive) return;
+    const topDown = LEVELS[state.level].mode === "shooter";
     state.bossTime++;
-    if (state.bossTime % 240 === 0) {
+    if (!topDown && state.bossTime % 240 === 0) {
       state.trabajeen = Math.min(Math.max(3, LEVELS[state.level].shouts ?? 3), state.trabajeen + 1);
     }
     if (boss.hitCooldown > 0) boss.hitCooldown--;
-    boss.y += boss.vy;
-    if (boss.y < 95 || boss.y + boss.h > H - 65) boss.vy *= -1;
+    if (topDown) {
+      boss.y = Math.min(82, boss.y);
+      boss.x += boss.vy;
+      if (boss.x < 95 || boss.x + boss.w > W - 95) boss.vy *= -1;
+    } else {
+      boss.y += boss.vy;
+      if (boss.y < 95 || boss.y + boss.h > H - 65) boss.vy *= -1;
+    }
     if (aabb(playerHitbox, boss)) damage(boss.config.name);
     if (boss.warn > 0) {
       boss.warn--;
@@ -1519,8 +1550,12 @@
         for (const offset of boss.shotOffsets) {
           state.ents.push({
             type: "bolt", bossShot: true,
-            x: boss.x - 16, y: boss.shotY + offset, w: 14, h: 8,
-            vx: -boss.shotSpeed, vy: 0, alive: true
+            x: topDown ? boss.shotX + offset : boss.x - 16,
+            y: topDown ? boss.y + boss.h : boss.shotY + offset,
+            w: topDown ? 8 : 14, h: topDown ? 14 : 8,
+            vx: topDown ? 0 : -boss.shotSpeed,
+            vy: topDown ? boss.shotSpeed : 0,
+            alive: true
           });
         }
         boss.attackTimer = boss.attackEvery;
@@ -1528,6 +1563,7 @@
     } else if (--boss.attackTimer <= 0) {
       boss.warn = 36;
       boss.shotY = boss.y + boss.h / 2;
+      boss.shotX = boss.x + boss.w / 2;
     }
   }
 
@@ -1873,14 +1909,19 @@
     if (L.mode === "shooter") {
       const horizontal = (KEY.ArrowRight || KEY.KeyD ? 1 : 0) - (KEY.ArrowLeft || KEY.KeyA ? 1 : 0);
       const vertical = (KEY.ArrowDown || KEY.KeyS ? 1 : 0) - (KEY.ArrowUp || KEY.KeyW ? 1 : 0);
+      let turnInput = horizontal;
       p.x += horizontal * 4.2;
       p.y += vertical * 4.2;
       if (POINTER.active) {
-        p.x += Math.max(-5, Math.min(5, (POINTER.x - (p.x + p.w / 2)) * 0.16));
+        const pointerDx = POINTER.x - (p.x + p.w / 2);
+        p.x += Math.max(-5, Math.min(5, pointerDx * 0.16));
         p.y += Math.max(-5, Math.min(5, (POINTER.y - (p.y + p.h / 2)) * 0.16));
+        if (Math.abs(pointerDx) > 8) turnInput = Math.sign(pointerDx);
       }
-      p.x = Math.max(78, Math.min(390, p.x));
-      p.y = Math.max(44, Math.min(H - 64, p.y));
+      const targetTurn = turnInput * Math.PI / 4;
+      p.turn += (targetTurn - (p.turn || 0)) * 0.24;
+      p.x = Math.max(82, Math.min(W - 82 - p.w, p.x));
+      p.y = Math.max(220, Math.min(H - 78 - p.h, p.y));
       p.vy = vertical * 4.2;
       if (state.shooterCooldown > 0) state.shooterCooldown--;
       if (KEY.Space || KEY.Pointer || POINTER.active) fireShooter();
@@ -1968,7 +2009,7 @@
       }
     });
 
-    if (L.mode !== "platform" && state.t % 16 === 0) {
+    if (!L.mode && state.t % 16 === 0) {
       state.bubbles.push({
         x: p.x + 8,
         y: p.y + 18,
@@ -1976,9 +2017,13 @@
         life: 50
       });
     }
-    for (const b of state.bubbles) { b.y += b.vy; b.x -= L.speed * 0.3; b.life--; }
+    for (const b of state.bubbles) { b.y += b.vy; b.x -= L.mode === "shooter" ? 0 : L.speed * 0.3; b.life--; }
     state.bubbles = state.bubbles.filter((b) => b.life > 0);
-    for (const pt of state.parts) { pt.x += pt.vx - L.speed * 0.4; pt.y += pt.vy; pt.life--; }
+    for (const pt of state.parts) {
+      pt.x += pt.vx - (L.mode === "shooter" ? 0 : L.speed * 0.4);
+      pt.y += pt.vy + (L.mode === "shooter" ? scroll * 0.15 : 0);
+      pt.life--;
+    }
     state.parts = state.parts.filter((pt) => pt.life > 0);
 
     const hitbox = state.dodgeTimer > 0 && L.mode === "platform"
@@ -1989,10 +2034,14 @@
 
     for (const e of state.ents) {
       if (!e.alive && e.type !== "connector") continue;
-      if (e.type !== "rocket") e.x -= scroll;
+      const projectile = e.type === "rocket" || e.type === "player-bullet" || e.type === "harpoon" || e.type === "bolt";
+      if (!projectile) {
+        if (L.mode === "shooter") e.y += scroll;
+        else e.x -= scroll;
+      }
 
       if (e.type === "boss" && e.alive) {
-        if (!state.bossActive && e.x <= W - 200) engageBoss(e);
+        if (!state.bossActive && (L.mode === "shooter" ? e.y + e.h >= 165 : e.x <= W - 200)) engageBoss(e);
         updateBoss(e, hitbox);
       }
 
@@ -2036,16 +2085,27 @@
       }
 
       if (e.type === "bug" && e.alive) {
-        e.y += e.vy;
-        if (e.y < 50 || e.y > H - 70) e.vy *= -1;
-        if (e.gunner && e.x > 430 && e.x < W - 30 && --e.fireTimer <= 0 && activeBolts < 6) {
+        if (L.mode === "shooter") {
+          e.x += e.strafe;
+          if (e.x < 82 || e.x + e.w > W - 82) e.strafe *= -1;
+          if (e.y > H + 70) e.alive = false;
+        } else {
+          e.y += e.vy;
+          if (e.y < 50 || e.y > H - 70) e.vy *= -1;
+        }
+        const inFireZone = L.mode === "shooter"
+          ? e.y > 48 && e.y < p.y - 48
+          : e.x > 430 && e.x < W - 30;
+        if (e.gunner && inFireZone && --e.fireTimer <= 0 && activeBolts < 6) {
           const dx = p.x - e.x;
           const dy = p.y - e.y;
           const distance = Math.hypot(dx, dy) || 1;
           state.ents.push({
             type: "bolt",
-            x: e.x - 8, y: e.y + e.h / 2,
-            w: 12, h: 7,
+            x: L.mode === "shooter" ? e.x + e.w / 2 - 4 : e.x - 8,
+            y: L.mode === "shooter" ? e.y + e.h - 4 : e.y + e.h / 2,
+            w: L.mode === "shooter" ? 8 : 12,
+            h: L.mode === "shooter" ? 12 : 7,
             vx: dx / distance * 4.4,
             vy: dy / distance * 4.4,
             gunnerShot: true,
@@ -2104,20 +2164,21 @@
       }
 
       if ((e.type === "player-bullet" || e.type === "harpoon") && e.alive) {
-        e.x += e.vx;
+        e.x += e.vx || 0;
+        e.y += e.vy || 0;
         e.life--;
         const target = state.ents.find((candidate) =>
           candidate !== e && candidate.alive && isRocketTarget(candidate) &&
           !(candidate.type === "boss" && candidate.hitCooldown > 0) && aabb(e, candidate)
         );
         if (target) rocketHit(e, target);
-        if (e.x > W + 50 || e.life <= 0) e.alive = false;
+        if (e.x > W + 50 || e.x < -50 || e.y < -60 || e.y > H + 60 || e.life <= 0) e.alive = false;
       }
 
       if (e.type === "bolt" && e.alive) {
         e.x += e.vx;
         e.y += e.vy;
-        e.renderVx = e.vx - scroll;
+        e.renderVx = L.mode === "shooter" ? e.vx : e.vx - scroll;
         if (aabb(hitbox, e)) { e.alive = false; damage(e.bossShot ? "BOSS SHOT" : "CANNON SHOT"); }
         if (e.x < -24 || e.x > W + 24 || e.y < -24 || e.y > H + 24) e.alive = false;
       }
@@ -2203,7 +2264,10 @@
         if (!e.alive && e.target) e.target.rocketTargeted = false;
       }
 
-      if (e.type === "goal" && e.alive && !state.boss?.alive && e.x + e.w / 2 <= p.x + p.w / 2) {
+      const reachedGoal = L.mode === "shooter"
+        ? e.type === "goal" && e.y + e.h / 2 >= p.y + p.h / 2
+        : e.type === "goal" && e.x + e.w / 2 <= p.x + p.w / 2;
+      if (e.type === "goal" && e.alive && !state.boss?.alive && reachedGoal) {
         e.alive = false;
         finishLevel();
         return;
@@ -2211,8 +2275,13 @@
     }
 
     for (const ln of state.links) {
-      ln.ax -= scroll;
-      ln.bx -= scroll;
+      if (L.mode === "shooter") {
+        ln.ay += scroll;
+        ln.by += scroll;
+      } else {
+        ln.ax -= scroll;
+        ln.bx -= scroll;
+      }
     }
 
   }
@@ -2254,6 +2323,25 @@
         ctx.fillRect(x, H - 16, 40, 6);
       }
       ctx.globalAlpha = 1;
+      return;
+    }
+
+    if (L.mode === "shooter" && SPR.level5.background) {
+      const background = SPR.level5.background;
+      const drawWidth = W;
+      const drawHeight = background.height / background.width * drawWidth;
+      const offset = ((state.dist * 0.22) % drawHeight + drawHeight) % drawHeight;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(background, 0, offset - drawHeight, drawWidth, drawHeight);
+      ctx.drawImage(background, 0, offset, drawWidth, drawHeight);
+      const routeShade = ctx.createLinearGradient(0, 0, 0, H);
+      routeShade.addColorStop(0, "rgba(4, 9, 18, 0.18)");
+      routeShade.addColorStop(0.55, "rgba(4, 9, 18, 0.04)");
+      routeShade.addColorStop(1, "rgba(4, 9, 18, 0.34)");
+      ctx.fillStyle = routeShade;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
       return;
     }
 
@@ -2478,7 +2566,23 @@
       const sprite = SPR.bugs[e.kind];
       const frame = (state.t >> 4) % 2;
       const gunnerSheet = e.gunner && SPR.level5.gunner;
-      if (gunnerSheet) {
+      const topDownSheet = LEVELS[state.level]?.mode === "shooter" && SPR.level5.enemies;
+      if (topDownSheet) {
+        const cell = topDownSheet.height;
+        const bob = reducedMotion ? 0 : Math.sin(state.t * 0.12 + e.kind * 2) * 2;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          topDownSheet,
+          e.kind * cell + 26, 12, cell - 52, cell - 28,
+          e.x - 9, e.y - 10 + bob, e.w + 18, e.h + 18
+        );
+        if (e.fireTimer < 16) {
+          ctx.fillStyle = e.fireTimer % 6 < 3 ? "#fff0a8" : "#ef6a4c";
+          ctx.fillRect(e.x + e.w / 2 - 5, e.y + e.h + 5, 10, 7);
+        }
+        ctx.restore();
+      } else if (gunnerSheet) {
         const cell = gunnerSheet.height;
         const gunnerFrame = e.fireTimer < 18 ? 2 : frame;
         const sourceX = gunnerFrame * cell + 42;
@@ -2518,7 +2622,9 @@
           ctx.fillRect(e.x - 15, e.y + e.h / 2 - 3, 5, 7);
         }
       }
-      const label = BUGS[e.kind].short;
+      const label = LEVELS[state.level]?.mode === "shooter"
+        ? ["CRAB", "EEL", "PUFFER"][e.kind]
+        : BUGS[e.kind].short;
       ctx.font = "bold 7px monospace";
       const labelWidth = ctx.measureText(label).width;
       ctx.fillStyle = "rgba(7, 15, 28, 0.82)";
@@ -2615,24 +2721,49 @@
     } else if (e.type === "harpoon" && e.alive) {
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = "#7fd7ff";
-      ctx.fillRect(e.x - 13, e.y + 2, 17, 4);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "#d9f2f5";
-      ctx.fillRect(e.x + 5, e.y + 3, 22, 2);
-      ctx.fillStyle = "#5da6b8";
-      ctx.fillRect(e.x + 3, e.y + 5, 24, 2);
-      ctx.fillStyle = "#f0d060";
-      ctx.fillRect(e.x, e.y + 2, 7, 6);
-      ctx.fillStyle = "#e8f4f6";
-      ctx.beginPath();
-      ctx.moveTo(e.x + e.w, e.y + e.h / 2);
-      ctx.lineTo(e.x + e.w - 9, e.y);
-      ctx.lineTo(e.x + e.w - 7, e.y + e.h / 2);
-      ctx.lineTo(e.x + e.w - 9, e.y + e.h);
-      ctx.closePath();
-      ctx.fill();
+      if (e.vertical) {
+        const hx = -e.w / 2;
+        const hy = -e.h / 2;
+        ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+        ctx.rotate(Math.atan2(e.vy, e.vx) + Math.PI / 2);
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = "#7fd7ff";
+        ctx.fillRect(hx + 2, hy + e.h - 2, 4, 18);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#d9f2f5";
+        ctx.fillRect(hx + 3, hy + 7, 2, 25);
+        ctx.fillStyle = "#5da6b8";
+        ctx.fillRect(hx + 5, hy + 9, 2, 23);
+        ctx.fillStyle = "#f0d060";
+        ctx.fillRect(hx + 1, hy + 27, 6, 7);
+        ctx.fillStyle = "#e8f4f6";
+        ctx.beginPath();
+        ctx.moveTo(0, hy);
+        ctx.lineTo(hx, hy + 10);
+        ctx.lineTo(0, hy + 7);
+        ctx.lineTo(hx + e.w, hy + 10);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = "#7fd7ff";
+        ctx.fillRect(e.x - 13, e.y + 2, 17, 4);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#d9f2f5";
+        ctx.fillRect(e.x + 5, e.y + 3, 22, 2);
+        ctx.fillStyle = "#5da6b8";
+        ctx.fillRect(e.x + 3, e.y + 5, 24, 2);
+        ctx.fillStyle = "#f0d060";
+        ctx.fillRect(e.x, e.y + 2, 7, 6);
+        ctx.fillStyle = "#e8f4f6";
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.w, e.y + e.h / 2);
+        ctx.lineTo(e.x + e.w - 9, e.y);
+        ctx.lineTo(e.x + e.w - 7, e.y + e.h / 2);
+        ctx.lineTo(e.x + e.w - 9, e.y + e.h);
+        ctx.closePath();
+        ctx.fill();
+      }
       ctx.restore();
     } else if (e.type === "player-bullet" && e.alive) {
       ctx.save();
@@ -2701,8 +2832,13 @@
         ctx.setLineDash([10, 7]);
         for (const offset of e.shotOffsets) {
           ctx.beginPath();
-          ctx.moveTo(0, e.shotY + offset + 4);
-          ctx.lineTo(e.x, e.shotY + offset + 4);
+          if (LEVELS[state.level]?.mode === "shooter") {
+            ctx.moveTo(e.shotX + offset + 4, e.y + e.h);
+            ctx.lineTo(e.shotX + offset + 4, H);
+          } else {
+            ctx.moveTo(0, e.shotY + offset + 4);
+            ctx.lineTo(e.x, e.shotY + offset + 4);
+          }
           ctx.stroke();
         }
         ctx.restore();
@@ -2710,7 +2846,25 @@
     } else if (e.type === "goal" && e.alive) {
       ctx.save();
       if (state.boss?.alive) ctx.globalAlpha = 0.4;
-      ctx.drawImage(SPR.gates[e.destination], e.x, e.y, e.w, e.h);
+      if (LEVELS[state.level]?.mode === "shooter") {
+        const pulse = reducedMotion ? 0.55 : 0.45 + Math.sin(state.t * 0.1) * 0.15;
+        ctx.fillStyle = "rgba(4, 15, 25, 0.88)";
+        ctx.fillRect(e.x - 70, e.y + 50, e.w + 140, 68);
+        ctx.strokeStyle = "#edc95d";
+        ctx.lineWidth = 4;
+        ctx.strokeRect(e.x - 66, e.y + 54, e.w + 132, 60);
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = "#7fd7ff";
+        ctx.fillRect(e.x - 52, e.y + 67, e.w + 104, 34);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = "#f4f7fb";
+        ctx.font = "bold 18px 'VT323', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("NORTH GATE", e.x + e.w / 2, e.y + 91);
+        ctx.textAlign = "left";
+      } else {
+        ctx.drawImage(SPR.gates[e.destination], e.x, e.y, e.w, e.h);
+      }
       ctx.restore();
     }
   }
@@ -2718,6 +2872,32 @@
   function drawHero() {
     const p = state.player;
     const blinking = state.invuln > 0 && state.t % 6 < 2;
+
+    if (LEVELS[state.level]?.mode === "shooter" && SPR.level5.hero) {
+      const sheet = SPR.level5.hero;
+      const cell = sheet.height;
+      const frame = state.shooterCooldown > 5 ? 2 : Math.floor(state.t / 7) % 2;
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+      ctx.rotate(p.turn || 0);
+      ctx.imageSmoothingEnabled = false;
+      if (!blinking) {
+        ctx.drawImage(
+          sheet,
+          frame * cell + 170, 10, cell - 340, cell - 24,
+          -36, -49, 72, 98
+        );
+      }
+      if (state.invuln > 0) {
+        ctx.strokeStyle = "rgba(255, 96, 96, " + (state.invuln / 70) + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 34, 46, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
 
     if (LEVELS[state.level]?.mode === "platform" && SPR.level4.runner) {
       const useActionSheet = SPR.level4.actions && (state.dodgeTimer > 0 || !state.grounded || state.harpoonFlash > 0);
@@ -2805,16 +2985,19 @@
   function drawSquad() {
     state.squad.forEach((s, idx) => {
       if (LEVELS[state.level]?.mode === "platform") {
-        if (SPR.level4.companions?.length) {
-          const sheet = SPR.level4.companions[idx % SPR.level4.companions.length];
+        const walking = state.grounded && SPR.level4.companionWalkers?.length;
+        const availableSheets = walking ? SPR.level4.companionWalkers : SPR.level4.companionActions;
+        if (availableSheets?.length) {
+          const sheet = availableSheets[idx % availableSheets.length];
           const cell = sheet.height;
-          const frame = state.grounded ? Math.floor((state.t + idx * 4) / 6) % 2 : 2;
+          const frame = walking ? Math.floor((state.t + idx * 3) / 5) % 3 : 2;
+          const bob = walking && !reducedMotion ? Math.abs(Math.sin((state.t + idx * 3) * 0.31)) * 1.5 : 0;
           ctx.save();
           ctx.imageSmoothingEnabled = false;
           ctx.drawImage(
             sheet,
-            frame * cell + 34, 22, cell - 68, 665,
-            Math.round(s.x - 29), Math.round(s.y - 60), 58, 60
+            frame * cell + 26, 18, cell - 52, 672,
+            Math.round(s.x - 32), Math.round(s.y - 65 - bob), 64, 65
           );
           ctx.restore();
         } else {
@@ -2938,12 +3121,17 @@
     ctx.font = "9px 'Press Start 2P', monospace";
     ctx.fillText("L" + (state.level + 1) + " " + L.name, 250, 23);
 
-    ctx.fillStyle = "#cde8f5";
-    const maxT = Math.min(4, state.bossActive ? Math.max(3, L.shouts ?? 3) : L.shouts ?? 3);
-    ctx.fillText("T x" + state.trabajeen, 600, 23);
-    for (let i = 0; i < maxT; i++) {
-      ctx.fillStyle = i < state.trabajeen ? "#00a1e0" : "#1a3038";
-      ctx.fillRect(668 + i * 12, 10, 10, 16);
+    if (L.shouts) {
+      ctx.fillStyle = "#cde8f5";
+      const maxT = Math.min(4, state.bossActive ? Math.max(3, L.shouts ?? 3) : L.shouts ?? 3);
+      ctx.fillText("T x" + state.trabajeen, 600, 23);
+      for (let i = 0; i < maxT; i++) {
+        ctx.fillStyle = i < state.trabajeen ? "#00a1e0" : "#1a3038";
+        ctx.fillRect(668 + i * 12, 10, 10, 16);
+      }
+    } else if (L.mode === "shooter") {
+      ctx.fillStyle = state.shooterCooldown > 0 ? "#8ca7b2" : "#edc95d";
+      ctx.fillText(state.shooterCooldown > 0 ? "RELOAD" : "HARPOON READY", 590, 23);
     }
 
     ctx.fillStyle = "#cde8f5";
@@ -2967,8 +3155,8 @@
     if (L.mode && !state.bossActive) {
       const modeText = L.mode === "platform"
         ? "ARROWS MOVE  ·  SPACE ×3 JUMP  ·  DOWN DODGE  ·  X HARPOON"
-        : "ARCADE SALVO  ·  ARROWS / DRAG MOVE  ·  SPACE FIRE";
-      const badgeWidth = L.mode === "platform" ? 500 : 410;
+        : "TOP-DOWN RUN  ·  ARROWS / DRAG MOVE  ·  SPACE HARPOON";
+      const badgeWidth = L.mode === "platform" ? 500 : 470;
       ctx.fillStyle = "rgba(4, 16, 24, 0.82)";
       ctx.fillRect(W / 2 - badgeWidth / 2, 44, badgeWidth, 25);
       ctx.strokeStyle = L.accent;
@@ -2997,6 +3185,10 @@
         10,
         H - 12
       );
+    } else if (L.mode === "shooter") {
+      ctx.fillStyle = "#edc95d";
+      ctx.font = "16px 'VT323', monospace";
+      ctx.fillText("ASCEND · HARPOON THE OUTLAWS · SURVIVE TO THE NORTHERN GATE", 10, H - 12);
     }
 
     if (state.bossActive && state.boss?.alive) {
@@ -3077,8 +3269,9 @@
     drawHero();
 
     if (LEVELS[state.level].mode === "shooter" && !state.bossActive) {
-      const aimX = state.player.x + 154;
-      const aimY = state.player.y + state.player.h / 2;
+      const aimAngle = state.player.turn || 0;
+      const aimX = state.player.x + state.player.w / 2 + Math.sin(aimAngle) * 92;
+      const aimY = state.player.y + state.player.h / 2 - Math.cos(aimAngle) * 92;
       ctx.save();
       ctx.globalAlpha = reducedMotion ? 0.42 : 0.32 + Math.sin(state.t * 0.14) * 0.1;
       ctx.strokeStyle = "#edc95d";
